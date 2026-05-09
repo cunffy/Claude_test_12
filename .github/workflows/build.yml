@@ -58,7 +58,19 @@ jobs:
 
       # ── 7. Build ─────────────────────────────────────────────────────────────
       - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: |
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/gradle.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Show build errors on failure
+        if: failure()
+        run: |
+          echo "========== KEY ERROR LINES =========="
+          grep -E "(^e: |FAILURE:|What went wrong:|Caused by:|> Task :)" \
+            /tmp/gradle.log | head -80 || true
+          echo ""
+          echo "========== LAST 120 LINES OF LOG =========="
+          tail -120 /tmp/gradle.log
 
       # ── 8. Upload APK ────────────────────────────────────────────────────────
       #    Download from: Actions tab → click the workflow run → Artifacts section
