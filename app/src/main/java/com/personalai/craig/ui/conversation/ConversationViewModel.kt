@@ -130,21 +130,15 @@ class ConversationViewModel @Inject constructor(
                     ttsManager.speak(responseText, flushQueue = false)
                 } else {
                     val systemPrompt = systemPromptBuilder.build(includeWebTools = false)
-                    val fullResponse = StringBuilder()
 
-                    claudeClient.sendMessageStreaming(
+                    // sendMessageStreaming returns the full accumulated response — use it directly
+                    responseText = claudeClient.sendMessageStreaming(
                         messages = conversationHistory,
                         systemPrompt = systemPrompt
                     ) { chunk ->
                         _uiState.value = UiState.Speaking(chunk)
                         ttsManager.speak(chunk)
                     }
-
-                    // Re-fetch full response for storage (streaming already spoke it)
-                    responseText = claudeClient.sendMessage(
-                        messages = conversationHistory,
-                        systemPrompt = systemPrompt
-                    )
                 }
 
                 // Add assistant response to display and persistence
