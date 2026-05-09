@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.personalai.craig"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.personalai.craig"
