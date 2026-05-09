@@ -49,10 +49,6 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-            // Anthropic SDK bundles Netty metadata — required to avoid duplicate file errors
-            excludes += "META-INF/INDEX.LIST"
-            excludes += "META-INF/io.netty.versions.properties"
-            excludes += "META-INF/DEPENDENCIES"
         }
     }
 }
@@ -90,8 +86,6 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-
-    implementation(libs.anthropic.java)
 
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.core)
