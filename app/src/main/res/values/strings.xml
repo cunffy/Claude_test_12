@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Craig</string>
+    <string name="accessibility_service_label">Craig Screen Context</string>
+    <string name="accessibility_service_description">Allows Craig to read the current screen content so he can give context-aware answers about what you\'re looking at.</string>
+</resources>

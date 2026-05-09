@@ -1,0 +1,23 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Keystore files
+*.jks
+*.keystore
+
+# Wake word models (user must add their own from console.picovoice.ai)
+*.ppn
+
+# Generated files
+app/build/
+
+# DataStore / preferences (contain secrets)
+*.preferences_pb

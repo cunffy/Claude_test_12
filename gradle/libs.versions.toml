@@ -1,0 +1,75 @@
+[versions]
+agp                     = "8.10.1"
+kotlin                  = "2.1.21"
+ksp                     = "2.1.21-2.0.1"
+coreKtx                 = "1.16.0"
+appcompat               = "1.7.0"
+activityCompose         = "1.10.0"
+composeBom              = "2026.03.00"
+lifecycle               = "2.10.0"
+room                    = "2.7.1"
+datastore               = "1.2.1"
+navigationCompose       = "2.9.0"
+hilt                    = "2.57.1"
+hiltNavigationCompose   = "1.2.0"
+okhttp                  = "5.0.0"
+anthropic               = "0.9.0"
+coroutines              = "1.10.2"
+porcupine               = "3.0.1"
+workManager             = "2.10.1"
+junit                   = "4.13.2"
+androidxTestJunit       = "1.2.1"
+espresso                = "3.6.1"
+
+[libraries]
+core-ktx                    = { group = "androidx.core",              name = "core-ktx",                    version.ref = "coreKtx"             }
+appcompat                   = { group = "androidx.appcompat",         name = "appcompat",                   version.ref = "appcompat"           }
+activity-compose            = { group = "androidx.activity",          name = "activity-compose",            version.ref = "activityCompose"     }
+
+compose-bom                 = { group = "androidx.compose",           name = "compose-bom",                 version.ref = "composeBom"          }
+compose-ui                  = { group = "androidx.compose.ui",        name = "ui"                                                               }
+compose-ui-tooling          = { group = "androidx.compose.ui",        name = "ui-tooling"                                                       }
+compose-ui-tooling-preview  = { group = "androidx.compose.ui",        name = "ui-tooling-preview"                                               }
+compose-material3           = { group = "androidx.compose.material3", name = "material3"                                                        }
+compose-material-icons      = { group = "androidx.compose.material",  name = "material-icons-extended"                                          }
+
+lifecycle-viewmodel-ktx     = { group = "androidx.lifecycle",         name = "lifecycle-viewmodel-ktx",     version.ref = "lifecycle"           }
+lifecycle-runtime-ktx       = { group = "androidx.lifecycle",         name = "lifecycle-runtime-ktx",       version.ref = "lifecycle"           }
+lifecycle-runtime-compose   = { group = "androidx.lifecycle",         name = "lifecycle-runtime-compose",   version.ref = "lifecycle"           }
+
+room-runtime                = { group = "androidx.room",              name = "room-runtime",                version.ref = "room"                }
+room-ktx                    = { group = "androidx.room",              name = "room-ktx",                    version.ref = "room"                }
+room-compiler               = { group = "androidx.room",              name = "room-compiler",               version.ref = "room"                }
+
+datastore-preferences       = { group = "androidx.datastore",         name = "datastore-preferences",       version.ref = "datastore"           }
+
+navigation-compose          = { group = "androidx.navigation",        name = "navigation-compose",          version.ref = "navigationCompose"   }
+
+hilt-android                = { group = "com.google.dagger",          name = "hilt-android",                version.ref = "hilt"                }
+hilt-compiler               = { group = "com.google.dagger",          name = "hilt-android-compiler",       version.ref = "hilt"                }
+hilt-navigation-compose     = { group = "androidx.hilt",              name = "hilt-navigation-compose",     version.ref = "hiltNavigationCompose"}
+
+okhttp                      = { group = "com.squareup.okhttp3",       name = "okhttp",                      version.ref = "okhttp"              }
+okhttp-logging              = { group = "com.squareup.okhttp3",       name = "logging-interceptor",         version.ref = "okhttp"              }
+
+anthropic-java              = { group = "com.anthropic",              name = "anthropic-java",              version.ref = "anthropic"           }
+
+coroutines-android          = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-android",  version.ref = "coroutines"          }
+coroutines-core             = { group = "org.jetbrains.kotlinx",      name = "kotlinx-coroutines-core",     version.ref = "coroutines"          }
+
+porcupine-android           = { group = "ai.picovoice",               name = "porcupine-android",           version.ref = "porcupine"           }
+
+work-runtime-ktx            = { group = "androidx.work",              name = "work-runtime-ktx",            version.ref = "workManager"         }
+hilt-work                   = { group = "androidx.hilt",              name = "hilt-work",                   version.ref = "hiltNavigationCompose"}
+hilt-work-compiler          = { group = "androidx.hilt",              name = "hilt-compiler",               version.ref = "hiltNavigationCompose"}
+
+junit                       = { group = "junit",                      name = "junit",                       version.ref = "junit"               }
+androidx-test-junit         = { group = "androidx.test.ext",          name = "junit",                       version.ref = "androidxTestJunit"   }
+espresso-core               = { group = "androidx.test.espresso",     name = "espresso-core",               version.ref = "espresso"            }
+
+[plugins]
+android-application         = { id = "com.android.application",             version.ref = "agp"    }
+kotlin-android              = { id = "org.jetbrains.kotlin.android",        version.ref = "kotlin" }
+kotlin-compose              = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp                         = { id = "com.google.devtools.ksp",             version.ref = "ksp"    }
+hilt                        = { id = "com.google.dagger.hilt.android",      version.ref = "hilt"   }
