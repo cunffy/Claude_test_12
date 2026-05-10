@@ -3,6 +3,8 @@ package com.personalai.craig.voice
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -42,9 +44,19 @@ class SpeechToTextManager @Inject constructor(
     val state: StateFlow<SttState> = _state.asStateFlow()
 
     private var recognizer: SpeechRecognizer? = null
+    private var lastLanguage = "en-US"
+    private var busyRetryCount = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @MainThread
     fun startListening(language: String = "en-US") {
+        lastLanguage = language
+        busyRetryCount = 0
+        startListeningInternal(language)
+    }
+
+    @MainThread
+    private fun startListeningInternal(language: String) {
         recognizer?.destroy()
         recognizer = SpeechRecognizer.createSpeechRecognizer(context)
         recognizer?.setRecognitionListener(buildListener())
@@ -113,6 +125,15 @@ class SpeechToTextManager @Inject constructor(
         }
 
         override fun onError(error: Int) {
+            if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && busyRetryCount < 3) {
+                busyRetryCount++
+                Log.w(TAG, "STT busy — retry #$busyRetryCount in 400ms")
+                recognizer?.destroy()
+                recognizer = null
+                mainHandler.postDelayed({ startListeningInternal(lastLanguage) }, 400L)
+                return
+            }
+            busyRetryCount = 0
             val msg = when (error) {
                 SpeechRecognizer.ERROR_AUDIO              -> "Audio recording error"
                 SpeechRecognizer.ERROR_CLIENT             -> "Client error"
@@ -120,7 +141,7 @@ class SpeechToTextManager @Inject constructor(
                 SpeechRecognizer.ERROR_NETWORK            -> "Network error"
                 SpeechRecognizer.ERROR_NETWORK_TIMEOUT    -> "Network timeout"
                 SpeechRecognizer.ERROR_NO_MATCH           -> "No speech matched"
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY    -> "Recognizer busy — try again"
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY    -> "Recognizer busy"
                 SpeechRecognizer.ERROR_SERVER             -> "Server error"
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT     -> "No speech detected"
                 else -> "Unknown error ($error)"

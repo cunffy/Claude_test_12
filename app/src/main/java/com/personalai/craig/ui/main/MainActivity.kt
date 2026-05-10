@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import com.personalai.craig.service.WakeWordService
@@ -38,18 +39,27 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
 
+    private val micPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) tryStartWakeWordService()
+    }
+
     override fun onResume() {
         super.onResume()
-        // Only start the foreground microphone service when the permission is already granted.
-        // On Android 14+, calling startForeground() with foregroundServiceType=microphone without
-        // RECORD_AUDIO throws a SecurityException, which crashes the app.
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED) {
-            try {
-                startForegroundService(WakeWordService.startIntent(this))
-            } catch (e: Exception) {
-                Log.w("MainActivity", "Could not start WakeWordService: ${e.message}")
-            }
+            tryStartWakeWordService()
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun tryStartWakeWordService() {
+        try {
+            startForegroundService(WakeWordService.startIntent(this))
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Could not start WakeWordService: ${e.message}")
         }
     }
 

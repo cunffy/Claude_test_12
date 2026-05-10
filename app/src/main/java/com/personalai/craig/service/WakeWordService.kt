@@ -85,7 +85,12 @@ class WakeWordService : Service() {
     private suspend fun run() {
         val modelDir = File(filesDir, MODEL_DIR_NAME)
 
-        if (!modelDir.exists()) {
+        val integrityMarker = File(modelDir, "am/final.mdl")
+        if (!modelDir.exists() || !integrityMarker.exists()) {
+            if (modelDir.exists()) {
+                Log.w(TAG, "Model dir exists but integrity check failed — re-downloading")
+                modelDir.deleteRecursively()
+            }
             updateNotification("Downloading wake word model (~40 MB)…")
             if (!downloadModel(modelDir)) {
                 updateNotification("Model download failed — wake word disabled")

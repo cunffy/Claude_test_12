@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -28,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -314,12 +318,22 @@ private fun MessageBubble(
     isPartial: Boolean = false
 ) {
     val isUser = message.role == "user"
+
+    // Decode screenshot once; null if absent or malformed
+    val screenshotBitmap = remember(message.imageBase64) {
+        message.imageBase64?.let { b64 ->
+            try {
+                val bytes = Base64.decode(b64, Base64.NO_WRAP)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (e: Exception) { null }
+        }
+    }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Bottom
     ) {
-        // Craig avatar dot for assistant messages
         if (!isUser) {
             Box(
                 modifier = Modifier
@@ -333,28 +347,41 @@ private fun MessageBubble(
             Spacer(Modifier.width(8.dp))
         }
 
-        Box(
-            modifier = Modifier
-                .widthIn(max = 290.dp)
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 18.dp, topEnd = 18.dp,
-                        bottomStart = if (isUser) 18.dp else 4.dp,
-                        bottomEnd = if (isUser) 4.dp else 18.dp
-                    )
-                )
-                .background(if (isUser) UserBubble else CraigSurface2)
-                .then(
-                    if (!isUser) Modifier.padding(start = 3.dp) else Modifier
-                )
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+        Column(
+            modifier = Modifier.widthIn(max = 290.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(
-                text = message.content,
-                color = if (isPartial) CraigSubtle else CraigOnSurface,
-                fontSize = 15.sp,
-                lineHeight = 22.sp
-            )
+            // Screenshot image (shown above the text bubble when present)
+            if (screenshotBitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = screenshotBitmap.asImageBitmap(),
+                    contentDescription = "Screenshot",
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(
+                        RoundedCornerShape(
+                            topStart = 18.dp, topEnd = 18.dp,
+                            bottomStart = if (isUser) 18.dp else 4.dp,
+                            bottomEnd = if (isUser) 4.dp else 18.dp
+                        )
+                    )
+                    .background(if (isUser) UserBubble else CraigSurface2)
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = message.content,
+                    color = if (isPartial) CraigSubtle else CraigOnSurface,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            }
         }
     }
 }

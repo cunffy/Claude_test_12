@@ -22,8 +22,8 @@ class TextToSpeechManager @Inject constructor(
     }
 
     private var tts: TextToSpeech? = null
-    private var isInitialized = false
-    private val pendingQueue = mutableListOf<String>()
+    @Volatile private var isInitialized = false
+    private val pendingQueue = mutableListOf<String>() // accessed only on main thread via onInit
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -59,16 +59,18 @@ class TextToSpeechManager @Inject constructor(
 
     private fun trySelectPremiumVoice() {
         val voices = tts?.voices ?: return
-        // Prefer the highest-quality offline en-US voice available
+        // Prefer high-quality network voices (Google Wavenet/Neural) over offline ones.
+        // Score: online voices get a large bonus; within each tier, higher quality wins.
+        // minByOrNull picks the lowest score = best voice.
         val best = voices
             .filter { v -> v.locale.language == "en" && v.locale.country == "US" }
             .minByOrNull { v ->
-                // Lower quality number = better; prefer offline to avoid network latency
-                v.quality * 10 - (if (!v.isNetworkConnectionRequired) 1000 else 0)
+                val onlineBonus = if (v.isNetworkConnectionRequired) -10_000 else 0
+                onlineBonus + (1000 - v.quality)   // lower quality# = worse, subtract it
             }
         if (best != null) {
             tts?.voice = best
-            Log.i(TAG, "TTS voice: ${best.name} quality=${best.quality}")
+            Log.i(TAG, "TTS voice: ${best.name} quality=${best.quality} online=${best.isNetworkConnectionRequired}")
         }
     }
 

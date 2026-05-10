@@ -13,6 +13,8 @@ import com.personalai.craig.web.OpticSEOController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @HiltViewModel
@@ -34,6 +36,10 @@ class ConversationViewModel @Inject constructor(
             "opticseo", "optic seo", "seo check", "seo report", "client", "clients",
             "website", "rank", "ranking", "analyze", "analyse", "audit"
         )
+        // Keywords that suggest a screenshot should be captured
+        private val SCREENSHOT_KEYWORDS = listOf(
+            "screenshot", "show me", "what does it look like", "photo", "capture"
+        )
     }
 
     sealed class UiState {
@@ -44,7 +50,13 @@ class ConversationViewModel @Inject constructor(
         data class Error(val message: String) : UiState()
     }
 
-    data class DisplayMessage(val role: String, val content: String)
+    data class DisplayMessage(
+        val role: String,
+        val content: String,
+        val imageBase64: String? = null
+    )
+
+    data class CommandResult(val text: String, val screenshotBase64: String?)
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -58,6 +70,8 @@ class ConversationViewModel @Inject constructor(
 
     private var currentConversationId: Long? = null
     private val conversationHistory = mutableListOf<ClaudeClient.Message>()
+
+    private val processingMutex = Mutex()
 
     fun initConversation(conversationId: Long?) {
         viewModelScope.launch {
@@ -84,6 +98,9 @@ class ConversationViewModel @Inject constructor(
      * 3. Call Claude (with or without web tools)
      * 4. Stream response to TTS
      * 5. Store assistant message and extract facts
+     *
+     * A mutex ensures only one input is processed at a time; if already locked,
+     * the call returns early after setting Idle state.
      */
     fun processUserInput(userText: String) {
         if (userText.isBlank()) {
@@ -92,6 +109,12 @@ class ConversationViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
+            // If another input is already being processed, drop this one.
+            if (!processingMutex.tryLock()) {
+                _uiState.value = UiState.Idle
+                return@launch
+            }
+
             try {
                 _uiState.value = UiState.Thinking()
 
@@ -114,24 +137,34 @@ class ConversationViewModel @Inject constructor(
                 }
 
                 val responseText: String
+                var responseImageBase64: String? = null
+
                 val needsWebControl = OPTICSEO_KEYWORDS.any {
                     userText.lowercase().contains(it)
                 }
+                val captureScreenshot = needsWebControl &&
+                    SCREENSHOT_KEYWORDS.any { userText.lowercase().contains(it) }
 
                 if (needsWebControl) {
                     _uiState.value = UiState.Thinking("Checking your OpticSEO site…")
                     ttsManager.speak("Let me check that on your OpticSEO site.", flushQueue = true)
 
-                    responseText = opticSeoController.executeCommand(
+                    val result: CommandResult = opticSeoController.executeCommand(
                         userCommand = userText,
-                        conversationHistory = conversationHistory.dropLast(1) // exclude current
+                        conversationHistory = conversationHistory.dropLast(1), // exclude current
+                        captureScreenshot = captureScreenshot
                     )
+                    responseText = result.text
+                    responseImageBase64 = result.screenshotBase64
+
                     // Speak the final response
                     ttsManager.speak(responseText, flushQueue = false)
                 } else {
                     val systemPrompt = systemPromptBuilder.build(includeWebTools = false)
 
-                    // sendMessageStreaming returns the full accumulated response — use it directly
+                    // sendMessageStreaming returns the full accumulated response.
+                    // onChunk already receives sentence-sized pieces from ClaudeClient;
+                    // update UI with the latest chunk only — no extra buffering needed.
                     responseText = claudeClient.sendMessageStreaming(
                         messages = conversationHistory,
                         systemPrompt = systemPrompt
@@ -142,7 +175,7 @@ class ConversationViewModel @Inject constructor(
                 }
 
                 // Add assistant response to display and persistence
-                val assistantMsg = DisplayMessage("assistant", responseText)
+                val assistantMsg = DisplayMessage("assistant", responseText, responseImageBase64)
                 _messages.value = _messages.value + assistantMsg
                 conversationRepository.addMessage(convId, "assistant", responseText)
 
@@ -167,6 +200,8 @@ class ConversationViewModel @Inject constructor(
                 }
                 ttsManager.speak(errMsg, flushQueue = true)
                 _uiState.value = UiState.Error(errMsg)
+            } finally {
+                processingMutex.unlock()
             }
         }
     }

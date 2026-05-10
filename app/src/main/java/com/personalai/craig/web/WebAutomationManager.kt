@@ -2,6 +2,9 @@ package com.personalai.craig.web
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebSettings
@@ -12,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -168,11 +172,33 @@ class WebAutomationManager @Inject constructor(
     }
 
     private suspend fun evaluateJsOnMain(script: String): String =
-        suspendCancellableCoroutine { cont ->
-            webView.evaluateJavascript(script) { result ->
-                if (cont.isActive) cont.resume(result ?: "null")
+        withTimeoutOrNull(10_000L) {
+            suspendCancellableCoroutine { cont ->
+                webView.evaluateJavascript(script) { result ->
+                    if (cont.isActive) cont.resume(result ?: "null")
+                }
             }
+        } ?: "timeout"
+
+    /**
+     * Captures the current WebView as a JPEG and returns it as a base64 string.
+     * Returns null if capture fails for any reason.
+     */
+    suspend fun captureScreenshot(): String? = withContext(Dispatchers.Main) {
+        try {
+            val w = webView.width.coerceAtLeast(100)
+            val h = webView.height.coerceAtLeast(100)
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            webView.draw(canvas)
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 70, out)
+            android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            Log.e(TAG, "Screenshot capture failed: ${e.message}")
+            null
         }
+    }
 
     suspend fun getCurrentUrl(): String = withContext(Dispatchers.Main) { webView.url ?: "" }
 
