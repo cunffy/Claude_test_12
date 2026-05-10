@@ -43,6 +43,18 @@ class OpticSEOController @Inject constructor(
     ): CommandResult {
         val hadError = AtomicBoolean(false)
 
+        // For pure screenshot requests, capture current WebView state without
+        // forcing a login/navigate cycle that might fail.
+        val isPureScreenshot = captureScreenshot &&
+            userCommand.lowercase().let { u ->
+                listOf("opticseo", "optic seo", "seo", "client", "website", "rank", "audit")
+                    .none { u.contains(it) }
+            }
+        if (isPureScreenshot) {
+            val shot = try { webManager.captureScreenshot() } catch (e: Exception) { null }
+            return CommandResult("Here's what's currently on screen.", shot)
+        }
+
         val loggedIn = session.ensureLoggedIn()
         if (!loggedIn) {
             return CommandResult(
@@ -76,15 +88,9 @@ class OpticSEOController @Inject constructor(
         )
 
         val screenshotIfNeeded: String? = if (captureScreenshot || hadError.get()) {
-            try {
-                webManager.captureScreenshot()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to capture screenshot: ${e.message}", e)
-                null
-            }
-        } else {
-            null
-        }
+            try { webManager.captureScreenshot() }
+            catch (e: Exception) { Log.e(TAG, "Screenshot failed: ${e.message}"); null }
+        } else null
 
         return CommandResult(responseText, screenshotIfNeeded)
     }

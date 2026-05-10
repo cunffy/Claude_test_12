@@ -17,6 +17,12 @@ class OpticSEOSession @Inject constructor(
         const val APP_URL   = "https://www.opticseoservices.com/app"
         const val LOGIN_URL = "https://www.opticseoservices.com/login"
         private val LOGGED_IN_INDICATORS = listOf("dashboard", "logout", "log out", "sign out")
+        // Combined CSS selector — querySelector() matches the FIRST element of ANY selector.
+        // This lets waitForElement() check all variants in a single 8-second poll window
+        // instead of 7 × 6 seconds = 42 seconds of sequential waits.
+        private const val EMAIL_COMBINED =
+            "input[type='email'], input[name='email'], input[id='email'], " +
+            "input[name='username'], input[autocomplete='email'], input[type='text']"
         private val EMAIL_SELECTORS = listOf(
             "input[type='email']",
             "input[name='email']",
@@ -57,12 +63,10 @@ class OpticSEOSession @Inject constructor(
             // Go directly to the login page — no SPA-redirect uncertainty
             manager.navigate(LOGIN_URL)
 
-            // Wait for any email-style input to appear (SPA may need time to hydrate)
-            val emailFieldPresent = EMAIL_SELECTORS.any { sel ->
-                val r = manager.waitForElement(sel, timeoutMs = 6_000)
-                r.contains("element found")
-            }
-
+            // Single combined waitForElement check — waits up to 8 s for ANY email
+            // input variant to appear. Using one wait avoids 7 × 6 s = 42 s timeouts.
+            val wait = manager.waitForElement(EMAIL_COMBINED, timeoutMs = 8_000)
+            val emailFieldPresent = wait.contains("element found")
             val currentUrl = manager.getCurrentUrl().lowercase()
 
             if (!emailFieldPresent) {

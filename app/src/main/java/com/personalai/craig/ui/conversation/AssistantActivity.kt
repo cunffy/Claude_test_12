@@ -131,8 +131,10 @@ class AssistantActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        sttManager.cancel()
-        startService(WakeWordService.resumeIntent(this))
+        // reset() clears any pending mainHandler retries so they don't fire
+        // after the activity is gone and start an unexpected listening session.
+        sttManager.reset()
+        try { startService(WakeWordService.resumeIntent(this)) } catch (e: Exception) { }
     }
 
     override fun onResume() {

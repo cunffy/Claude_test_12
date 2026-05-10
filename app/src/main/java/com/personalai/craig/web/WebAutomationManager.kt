@@ -8,9 +8,11 @@ import android.graphics.Canvas
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.SslErrorHandler
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.net.http.SslError
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -62,6 +64,8 @@ class WebAutomationManager @Inject constructor(
 
     /**
      * Navigate to a URL and wait for the page to finish loading.
+     * invokeOnCancellation stops the WebView load if the calling coroutine is cancelled,
+     * preventing stale navigations from interfering with the next operation.
      */
     suspend fun navigate(url: String): String = withContext(Dispatchers.Main) {
         withTimeoutOrNull(NAV_TIMEOUT_MS) {
@@ -70,7 +74,13 @@ class WebAutomationManager @Inject constructor(
                     override fun onPageFinished(view: WebView, url: String) {
                         if (cont.isActive) cont.resume("Navigated to $url")
                     }
+                    @SuppressLint("WebViewClientOnReceivedSslError")
+                    override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                        // Proceed through SSL errors for automated web access only.
+                        handler.proceed()
+                    }
                 }
+                cont.invokeOnCancellation { webView.stopLoading() }
                 webView.loadUrl(url)
             }
         } ?: "Navigation timed out for $url"

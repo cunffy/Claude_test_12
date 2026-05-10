@@ -66,7 +66,7 @@ class SystemPromptBuilder @Inject constructor(
             }
 
             appendLine("## Your Capabilities on OpticSEO")
-            appendLine("The website is at https://opticseoservices.com/app — this is your starting point for every task.")
+            appendLine("The website is at https://www.opticseoservices.com/app — this is your starting point for every task.")
             appendLine("You can navigate any page, find and manage clients, run SEO checks and reports,")
             appendLine("fill forms, click buttons, read page content, and execute any multi-step task on the website.")
             appendLine("You are already logged in before any tool call runs, so go straight to the task.")

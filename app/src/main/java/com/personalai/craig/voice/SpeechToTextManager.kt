@@ -86,8 +86,24 @@ class SpeechToTextManager @Inject constructor(
         _state.value = SttState.Idle
     }
 
+    /**
+     * Full reset — clears any pending retry callbacks and destroys the recognizer.
+     * Call from Activity.onPause() to prevent stale retries from firing after the
+     * activity is gone.
+     */
+    @MainThread
+    fun reset() {
+        mainHandler.removeCallbacksAndMessages(null)
+        busyRetryCount = 0
+        recognizer?.cancel()
+        recognizer?.destroy()
+        recognizer = null
+        _state.value = SttState.Idle
+    }
+
     @MainThread
     fun destroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
         _state.value = SttState.Idle

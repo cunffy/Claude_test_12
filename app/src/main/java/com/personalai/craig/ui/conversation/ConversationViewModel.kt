@@ -137,11 +137,10 @@ class ConversationViewModel @Inject constructor(
                 val responseText: String
                 var responseImageBase64: String? = null
 
-                val needsWebControl = OPTICSEO_KEYWORDS.any {
+                val captureScreenshot = SCREENSHOT_KEYWORDS.any { userText.lowercase().contains(it) }
+                val needsWebControl = captureScreenshot || OPTICSEO_KEYWORDS.any {
                     userText.lowercase().contains(it)
                 }
-                val captureScreenshot = needsWebControl &&
-                    SCREENSHOT_KEYWORDS.any { userText.lowercase().contains(it) }
 
                 if (needsWebControl) {
                     _uiState.value = UiState.Thinking("Checking your OpticSEO site…")
