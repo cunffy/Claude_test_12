@@ -56,8 +56,6 @@ class ConversationViewModel @Inject constructor(
         val imageBase64: String? = null
     )
 
-    data class CommandResult(val text: String, val screenshotBase64: String?)
-
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
@@ -149,7 +147,7 @@ class ConversationViewModel @Inject constructor(
                     _uiState.value = UiState.Thinking("Checking your OpticSEO site…")
                     ttsManager.speak("Let me check that on your OpticSEO site.", flushQueue = true)
 
-                    val result: CommandResult = opticSeoController.executeCommand(
+                    val result: OpticSEOController.CommandResult = opticSeoController.executeCommand(
                         userCommand = userText,
                         conversationHistory = conversationHistory.dropLast(1), // exclude current
                         captureScreenshot = captureScreenshot
