@@ -57,6 +57,12 @@
             </intent-filter>
         </activity>
 
+        <!-- ============ BUSINESS BRIEFING ACTIVITY ============ -->
+        <activity
+            android:name=".ui.onboarding.BusinessBriefingActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- ============ MAIN ACTIVITY ============ -->
         <activity
             android:name=".ui.main.MainActivity"

@@ -23,14 +23,20 @@ class SecurePreferences @Inject constructor(
         val OPTICSEO_USERNAME   = stringPreferencesKey("opticseo_username")
         val OPTICSEO_PASSWORD   = stringPreferencesKey("opticseo_password")
         val SETUP_COMPLETE      = booleanPreferencesKey("setup_complete")
+        val BRIEFING_COMPLETE   = booleanPreferencesKey("briefing_complete")
     }
 
-    val claudeApiKey: Flow<String?>     = context.dataStore.data.map { it[CLAUDE_API_KEY] }
-    val assistantName: Flow<String>     = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Craig" }
-    val voiceGender: Flow<String>       = context.dataStore.data.map { it[VOICE_GENDER] ?: "male" }
-    val opticSeoUsername: Flow<String?> = context.dataStore.data.map { it[OPTICSEO_USERNAME] }
-    val opticSeoPassword: Flow<String?> = context.dataStore.data.map { it[OPTICSEO_PASSWORD] }
-    val isSetupComplete: Flow<Boolean>  = context.dataStore.data.map { it[SETUP_COMPLETE] ?: false }
+    val claudeApiKey: Flow<String?>       = context.dataStore.data.map { it[CLAUDE_API_KEY] }
+    val assistantName: Flow<String>       = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Craig" }
+    val voiceGender: Flow<String>         = context.dataStore.data.map { it[VOICE_GENDER] ?: "male" }
+    val opticSeoUsername: Flow<String?>   = context.dataStore.data.map { it[OPTICSEO_USERNAME] }
+    val opticSeoPassword: Flow<String?>   = context.dataStore.data.map { it[OPTICSEO_PASSWORD] }
+    val isSetupComplete: Flow<Boolean>    = context.dataStore.data.map { it[SETUP_COMPLETE] ?: false }
+    val isBriefingComplete: Flow<Boolean> = context.dataStore.data.map { it[BRIEFING_COMPLETE] ?: false }
+
+    suspend fun setBriefingComplete() {
+        context.dataStore.edit { it[BRIEFING_COMPLETE] = true }
+    }
 
     suspend fun saveSetupData(
         claudeKey: String,

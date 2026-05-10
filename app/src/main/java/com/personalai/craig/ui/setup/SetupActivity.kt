@@ -19,15 +19,20 @@ import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import com.personalai.craig.data.preferences.SecurePreferences
 import com.personalai.craig.ui.main.MainActivity
+import com.personalai.craig.ui.onboarding.BusinessBriefingActivity
 import com.personalai.craig.ui.theme.CraigTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class SetupActivity : ComponentActivity() {
 
     private val viewModel: SetupViewModel by viewModels()
+    @Inject lateinit var prefs: SecurePreferences
 
     private val assistantRoleLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -36,34 +41,45 @@ class SetupActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // If already set up, go straight to main
         lifecycleScope.launch {
-            viewModel.isSetupComplete.collect { complete ->
-                if (complete) navigateToMain()
+            if (prefs.isSetupComplete.first()) {
+                // Setup done — skip to briefing or main
+                if (prefs.isBriefingComplete.first()) navigateToMain()
+                else navigateToBriefing()
+                return@launch
+            }
+
+            // Stay on setup screen; watch for save completion
+            viewModel.navigateNext.collect { needsBriefing ->
+                requestAssistantRole()
+                if (needsBriefing) navigateToBriefing() else navigateToMain()
             }
         }
 
         setContent {
             CraigTheme {
-                SetupScreen(
-                    viewModel = viewModel,
-                    onComplete = {
-                        requestAssistantRole()
-                        navigateToMain()
-                    }
-                )
+                val snackbarState = remember { SnackbarHostState() }
+                LaunchedEffect(Unit) {
+                    viewModel.error.collect { msg -> snackbarState.showSnackbar(msg) }
+                }
+                SetupScreen(viewModel = viewModel, snackbarState = snackbarState)
             }
         }
     }
 
     private fun requestAssistantRole() {
-        val roleManager = getSystemService(RoleManager::class.java)
+        val roleManager = getSystemService(RoleManager::class.java) ?: return
         if (roleManager.isRoleAvailable(RoleManager.ROLE_ASSISTANT) &&
             !roleManager.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
             assistantRoleLauncher.launch(
                 roleManager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
             )
         }
+    }
+
+    private fun navigateToBriefing() {
+        startActivity(Intent(this, BusinessBriefingActivity::class.java))
+        finish()
     }
 
     private fun navigateToMain() {
@@ -73,25 +89,16 @@ class SetupActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
-    var claudeKey       by remember { mutableStateOf("") }
-    var assistantName   by remember { mutableStateOf("Craig") }
-    var voiceGender     by remember { mutableStateOf("male") }
-    var opticSeoUser    by remember { mutableStateOf("") }
-    var opticSeoPass    by remember { mutableStateOf("") }
-    var showClaudeKey   by remember { mutableStateOf(false) }
-    var showSeoPass     by remember { mutableStateOf(false) }
-    var snackbarMsg     by remember { mutableStateOf("") }
-    val snackbarState   = remember { SnackbarHostState() }
+private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostState) {
+    var claudeKey     by remember { mutableStateOf("") }
+    var assistantName by remember { mutableStateOf("Craig") }
+    var voiceGender   by remember { mutableStateOf("male") }
+    var opticSeoUser  by remember { mutableStateOf("") }
+    var opticSeoPass  by remember { mutableStateOf("") }
+    var showClaudeKey by remember { mutableStateOf(false) }
+    var showSeoPass   by remember { mutableStateOf(false) }
 
     val context = androidx.compose.ui.platform.LocalContext.current
-
-    LaunchedEffect(Unit) {
-        viewModel.saveSuccess.collect { onComplete() }
-    }
-    LaunchedEffect(Unit) {
-        viewModel.error.collect { msg -> snackbarState.showSnackbar(msg) }
-    }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarState) }) { padding ->
         Column(
@@ -104,41 +111,36 @@ private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
         ) {
             Text("Welcome to Craig", fontSize = 28.sp, fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary)
-            Text("Your personal AI assistant. Let's get you set up.",
+            Text("Your personal business assistant. Let's get you set up.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
 
             Spacer(Modifier.height(8.dp))
 
-            SectionHeader("Assistant")
+            SectionHeader("Assistant Name")
             OutlinedTextField(
                 value = assistantName,
                 onValueChange = { assistantName = it },
-                label = { Text("Assistant name") },
+                label = { Text("Name") },
                 modifier = Modifier.fillMaxWidth()
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Voice: ", color = MaterialTheme.colorScheme.onSurface)
-                Row {
-                    listOf("male", "female").forEach { gender ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(end = 16.dp)
-                        ) {
-                            RadioButton(
-                                selected = voiceGender == gender,
-                                onClick = { voiceGender = gender }
-                            )
-                            Text(gender.replaceFirstChar { it.uppercase() },
-                                color = MaterialTheme.colorScheme.onSurface)
-                        }
+                Text("Voice:  ", color = MaterialTheme.colorScheme.onSurface)
+                listOf("male", "female").forEach { gender ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 16.dp)
+                    ) {
+                        RadioButton(selected = voiceGender == gender, onClick = { voiceGender = gender })
+                        Text(gender.replaceFirstChar { it.uppercase() },
+                            color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
 
             Spacer(Modifier.height(4.dp))
             SectionHeader("Claude API Key")
-            Text("Get your key at platform.anthropic.com",
+            Text("Get yours free at platform.anthropic.com",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             OutlinedTextField(
                 value = claudeKey,
@@ -154,20 +156,20 @@ private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            SectionHeader("OpticSEO Access")
-            Text("Craig will use these credentials to control your OpticSEO website.",
+            SectionHeader("OpticSEO Login")
+            Text("Craig will use these to log in and control your OpticSEO website.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             OutlinedTextField(
                 value = opticSeoUser,
                 onValueChange = { opticSeoUser = it },
-                label = { Text("OpticSEO email / username") },
+                label = { Text("Email / username") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = opticSeoPass,
                 onValueChange = { opticSeoPass = it },
-                label = { Text("OpticSEO password") },
+                label = { Text("Password") },
                 visualTransformation = if (showSeoPass) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     TextButton(onClick = { showSeoPass = !showSeoPass }) {
@@ -182,14 +184,11 @@ private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
 
             Button(
                 onClick = {
-                    viewModel.saveAndContinue(
-                        claudeKey, assistantName,
-                        voiceGender, opticSeoUser, opticSeoPass
-                    )
+                    viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text("Get Started", fontSize = 16.sp)
+                Text("Continue", fontSize = 16.sp)
             }
 
             OutlinedButton(
@@ -203,7 +202,7 @@ private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
                 onClick = { viewModel.openAccessibilitySettings(context) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Enable screen context (Accessibility)")
+                Text("Enable Accessibility (screen reading)")
             }
         }
     }

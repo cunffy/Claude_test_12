@@ -25,78 +25,66 @@ class SystemPromptBuilder @Inject constructor(
         private const val SCREEN_MAX_AGE_MS = 30_000L
     }
 
-    /**
-     * Builds the full system prompt injected into every Claude API call.
-     * Includes user identity, learned facts, current screen context, and instructions.
-     */
     suspend fun build(includeWebTools: Boolean = false): String = withContext(Dispatchers.IO) {
         val assistantName = prefs.assistantName.first()
         val currentTime   = SimpleDateFormat("EEEE, MMMM d yyyy, h:mm a", Locale.US).format(Date())
-        val profile       = loadProfile()
+        val briefing      = memoryManager.getBusinessBriefing()
         val memory        = memoryManager.getMemorySummary().take(MAX_MEMORY_CHARS)
         val summaries     = memoryManager.getRecentConversationSummaries(3)
         val screenCtx     = loadScreenContext().take(MAX_SCREEN_CHARS)
 
         buildString {
-            appendLine("You are $assistantName, a highly personalized AI assistant running on an Android phone.")
-            appendLine("You are warm, helpful, and adapt your communication style to the user's preferences.")
+            appendLine("You are $assistantName, a dedicated business assistant.")
+            appendLine("Your entire purpose is to help manage and grow this business through its OpticSEO website.")
+            appendLine("You have full knowledge of the business (see briefing below) and complete control of the OpticSEO website.")
             appendLine("Current date and time: $currentTime")
             appendLine()
 
-            if (profile.isNotEmpty()) {
-                appendLine("## User Profile")
-                appendLine(profile)
+            if (briefing.isNotEmpty()) {
+                appendLine("## Business Briefing")
+                appendLine("Everything you need to know about this business:")
+                appendLine(briefing)
                 appendLine()
             }
 
             if (memory.isNotEmpty()) {
-                appendLine("## What You Know About the User")
+                appendLine("## What You've Learned")
                 appendLine(memory)
                 appendLine()
             }
 
             if (summaries.isNotEmpty()) {
-                appendLine("## Recent Conversation Summaries")
+                appendLine("## Recent Conversation History")
                 appendLine(summaries)
                 appendLine()
             }
 
             if (screenCtx.isNotEmpty()) {
-                appendLine("## Current Screen Context")
+                appendLine("## Current Screen")
                 appendLine(screenCtx)
-                appendLine("Use this if the user refers to something on their screen.")
                 appendLine()
             }
 
-            if (includeWebTools) {
-                appendLine("## OpticSEO Website Access")
-                appendLine("You have full control of the user's OpticSEO website at www.opticseoservices.com.")
-                appendLine("When asked to perform actions on the site, use the available web tools.")
-                appendLine("Always call read_page first to understand the current state before acting.")
-                appendLine("Narrate what you are doing so the user knows you are working on it.")
-                appendLine()
-            }
+            appendLine("## Your Capabilities on OpticSEO")
+            appendLine("You can navigate any page, find and manage clients, run SEO checks and reports,")
+            appendLine("fill forms, click buttons, read page content, and execute any multi-step task on the website.")
+            appendLine("You have full access — there is nothing on the site you cannot do.")
+            appendLine()
 
-            appendLine("## Instructions")
-            appendLine("- Keep responses concise and conversational unless the user asks for detail or types a detailed question.")
-            appendLine("- Do not use markdown formatting (no **, ##, or bullet symbols) — respond in plain natural sentences.")
-            appendLine("- Actively remember everything the user tells you about themselves, their business, their clients, and their website.")
-            appendLine("- When you learn something new about the user, acknowledge it naturally and use it in future responses.")
-            appendLine("- If unsure about a personal fact, ask rather than assume.")
-            appendLine("- Respond in the user's language if they speak in a language other than English.")
+            appendLine("## How to Respond")
+            appendLine("- Be direct and action-oriented — you are a business tool, not a chatbot.")
+            appendLine("- When executing website tasks, narrate each step briefly so the user knows what's happening.")
+            appendLine("- Proactively suggest improvements and next steps based on what you see.")
+            appendLine("- Remember and build on everything the user teaches you.")
+            appendLine("- Keep responses concise. No markdown formatting — plain natural sentences only.")
+            appendLine("- If asked something you don't know about the business, ask the user to tell you.")
         }.trimEnd()
-    }
-
-    private suspend fun loadProfile(): String {
-        val entries = userProfileDao.getAll()
-        return entries.joinToString("\n") { "- ${it.key.replace('_', ' ')}: ${it.value}" }
     }
 
     private suspend fun loadScreenContext(): String {
         val ctx = appContextDao.getLatest() ?: return ""
-        val ageMs = System.currentTimeMillis() - ctx.timestamp
-        if (ageMs > SCREEN_MAX_AGE_MS) return ""
+        if (System.currentTimeMillis() - ctx.timestamp > SCREEN_MAX_AGE_MS) return ""
         val title = ctx.windowTitle?.let { " ($it)" } ?: ""
-        return "App: ${ctx.packageName}$title\nScreen content: ${ctx.screenText}"
+        return "App: ${ctx.packageName}$title\nContent: ${ctx.screenText}"
     }
 }

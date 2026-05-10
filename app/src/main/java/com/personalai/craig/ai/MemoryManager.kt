@@ -70,10 +70,42 @@ class MemoryManager @Inject constructor(
     }
 
     /**
-     * Returns a formatted string of all known user facts for use in the system prompt.
+     * Returns the raw business briefing text the user entered at onboarding.
+     */
+    suspend fun getBusinessBriefing(): String = withContext(Dispatchers.IO) {
+        userMemoryDao.getAll().find { it.key == "business_briefing" }?.value ?: ""
+    }
+
+    /**
+     * Stores the business briefing and extracts individual facts from it.
+     * Called once during onboarding; updates the briefing any time it's re-submitted.
+     */
+    suspend fun storeBriefing(briefingText: String) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        userMemoryDao.upsertAll(listOf(
+            UserMemoryEntity(
+                key = "business_briefing",
+                value = briefingText.take(5_000),
+                source = "user_stated",
+                createdAt = now,
+                updatedAt = now
+            )
+        ))
+        // Also pull individual facts so they appear in the regular memory summary
+        try {
+            val jsonFacts = claudeClient.extractFacts(briefingText)
+            parseAndStoreFacts(jsonFacts)
+        } catch (e: Exception) {
+            Log.w(TAG, "Briefing fact extraction failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Returns a formatted string of all known facts (excluding the raw briefing blob)
+     * for use in the system prompt.
      */
     suspend fun getMemorySummary(): String = withContext(Dispatchers.IO) {
-        val facts = userMemoryDao.getAll()
+        val facts = userMemoryDao.getAll().filter { it.key != "business_briefing" }
         if (facts.isEmpty()) return@withContext ""
         facts.joinToString("\n") { "- ${it.key.replace('_', ' ')}: ${it.value}" }
     }

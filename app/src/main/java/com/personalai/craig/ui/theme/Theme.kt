@@ -6,11 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary          = CraigBlue,
-    onPrimary        = Color.White,
-    primaryContainer = CraigBlueDark,
-    secondary        = CraigAccent,
-    onSecondary      = Color.Black,
+    primary          = CraigTeal,
+    onPrimary        = Color.Black,
+    primaryContainer = CraigTealDark,
+    secondary        = CraigBlue,
+    onSecondary      = Color.White,
+    tertiary         = CraigAccent,
     background       = CraigBackground,
     surface          = CraigSurface,
     onSurface        = CraigOnSurface,

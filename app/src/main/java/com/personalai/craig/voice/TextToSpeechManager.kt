@@ -45,13 +45,30 @@ class TextToSpeechManager @Inject constructor(
                 Log.e(TAG, "Language not supported")
             } else {
                 isInitialized = true
-                tts?.setSpeechRate(1.05f)
-                tts?.setPitch(0.9f)
+                // Slightly slower + lower pitch = more natural, confident tone
+                tts?.setSpeechRate(0.92f)
+                tts?.setPitch(0.88f)
+                trySelectPremiumVoice()
                 pendingQueue.forEach { speak(it) }
                 pendingQueue.clear()
             }
         } else {
             Log.e(TAG, "TTS init failed with status: $status")
+        }
+    }
+
+    private fun trySelectPremiumVoice() {
+        val voices = tts?.voices ?: return
+        // Prefer the highest-quality offline en-US voice available
+        val best = voices
+            .filter { v -> v.locale.language == "en" && v.locale.country == "US" }
+            .minByOrNull { v ->
+                // Lower quality number = better; prefer offline to avoid network latency
+                v.quality * 10 - (if (!v.isNetworkConnectionRequired) 1000 else 0)
+            }
+        if (best != null) {
+            tts?.voice = best
+            Log.i(TAG, "TTS voice: ${best.name} quality=${best.quality}")
         }
     }
 
@@ -71,7 +88,7 @@ class TextToSpeechManager @Inject constructor(
 
     fun setVoiceGender(gender: String) {
         if (!isInitialized) return
-        val pitch = if (gender.lowercase() == "female") 1.2f else 0.85f
+        val pitch = if (gender.lowercase() == "female") 1.05f else 0.88f
         tts?.setPitch(pitch)
     }
 

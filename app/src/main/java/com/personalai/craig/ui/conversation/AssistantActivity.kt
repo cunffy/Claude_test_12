@@ -26,7 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,34 +57,27 @@ class AssistantActivity : ComponentActivity() {
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) startListening() else finish()
-    }
+    ) { granted -> if (granted) startListening() else finish() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val conversationId = intent.getLongExtra(EXTRA_CONVERSATION_ID, -1L)
-            .takeIf { it != -1L }
+        val conversationId = intent.getLongExtra(EXTRA_CONVERSATION_ID, -1L).takeIf { it != -1L }
         viewModel.initConversation(conversationId)
 
         setContent {
             CraigTheme {
-                val uiState        by viewModel.uiState.collectAsStateWithLifecycle()
-                val messages       by viewModel.messages.collectAsStateWithLifecycle()
-                val assistantName  by viewModel.assistantName.collectAsStateWithLifecycle()
-                val sttState       by sttManager.state.collectAsStateWithLifecycle()
+                val uiState       by viewModel.uiState.collectAsStateWithLifecycle()
+                val messages      by viewModel.messages.collectAsStateWithLifecycle()
+                val assistantName by viewModel.assistantName.collectAsStateWithLifecycle()
+                val sttState      by sttManager.state.collectAsStateWithLifecycle()
 
-                // When STT produces a result, process it
                 LaunchedEffect(sttState) {
                     when (val s = sttState) {
-                        is SpeechToTextManager.SttState.Result -> {
-                            viewModel.processUserInput(s.text)
-                        }
+                        is SpeechToTextManager.SttState.Result -> viewModel.processUserInput(s.text)
                         is SpeechToTextManager.SttState.Error -> {
-                            if (s.code != android.speech.SpeechRecognizer.ERROR_NO_MATCH) {
+                            if (s.code != android.speech.SpeechRecognizer.ERROR_NO_MATCH)
                                 viewModel.setIdleState()
-                            }
                         }
                         else -> {}
                     }
@@ -90,31 +85,25 @@ class AssistantActivity : ComponentActivity() {
 
                 AssistantScreen(
                     assistantName = assistantName,
-                    messages = messages,
-                    uiState = uiState,
-                    sttState = sttState,
-                    onMicPressed = { requestMicAndListen() },
+                    messages      = messages,
+                    uiState       = uiState,
+                    sttState      = sttState,
+                    onMicPressed  = { requestMicAndListen() },
                     onStopSpeaking = { viewModel.stopSpeaking() },
-                    onSendText = { viewModel.processUserInput(it) },
-                    onClose = { finish() }
+                    onSendText    = { viewModel.processUserInput(it) },
+                    onClose       = { finish() }
                 )
             }
         }
 
-        // Auto-start listening when triggered by wake word or manual tap
         val trigger = intent.getStringExtra(EXTRA_TRIGGER)
-        if (trigger == TRIGGER_WAKE_WORD || trigger == TRIGGER_MANUAL) {
-            requestMicAndListen()
-        }
+        if (trigger == TRIGGER_WAKE_WORD || trigger == TRIGGER_MANUAL) requestMicAndListen()
     }
 
     private fun requestMicAndListen() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            == PackageManager.PERMISSION_GRANTED) {
-            startListening()
-        } else {
-            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
+            == PackageManager.PERMISSION_GRANTED) startListening()
+        else micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun startListening() {
@@ -125,16 +114,18 @@ class AssistantActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         sttManager.cancel()
-        // Resume wake word detection
         startService(WakeWordService.resumeIntent(this))
     }
 
     override fun onResume() {
         super.onResume()
-        // Pause wake word detection while we're actively in the activity
         startService(WakeWordService.pauseIntent(this))
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,22 +140,34 @@ private fun AssistantScreen(
     onClose: () -> Unit
 ) {
     val listState = rememberLazyListState()
-
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 
     Scaffold(
+        containerColor = CraigBackground,
         topBar = {
             TopAppBar(
-                title = { Text(assistantName) },
+                title = {
+                    Column {
+                        Text(assistantName, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+                        Text(
+                            "Business Assistant",
+                            fontSize = 12.sp,
+                            color = CraigTeal,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close",
+                            tint = CraigSubtle)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = CraigBackground
+                    containerColor = CraigBackground,
+                    titleContentColor = CraigOnSurface
                 )
             )
         }
@@ -172,27 +175,26 @@ private fun AssistantScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(CraigBackground)
                 .padding(padding)
         ) {
-            // Messages
+            // Message list
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(messages) { msg ->
-                    MessageBubble(message = msg)
+                if (messages.isEmpty()) {
+                    item { EmptyState(assistantName = assistantName) }
                 }
+
+                items(messages) { msg -> MessageBubble(message = msg) }
 
                 // Live partial transcript
                 if (sttState is SpeechToTextManager.SttState.Partial) {
                     item {
                         MessageBubble(
-                            message = ConversationViewModel.DisplayMessage(
-                                "user", sttState.text + "…"
-                            ),
+                            message = ConversationViewModel.DisplayMessage("user", sttState.text + "…"),
                             isPartial = true
                         )
                     }
@@ -200,14 +202,12 @@ private fun AssistantScreen(
 
                 // Thinking indicator
                 if (uiState is ConversationViewModel.UiState.Thinking) {
-                    item {
-                        ThinkingIndicator(label = uiState.partial)
-                    }
+                    item { ThinkingIndicator(label = uiState.partial) }
                 }
             }
 
-            // Text input + mic / stop controls
-            StatusAndControls(
+            // Input bar
+            InputBar(
                 uiState = uiState,
                 sttState = sttState,
                 onMicPressed = onMicPressed,
@@ -218,6 +218,80 @@ private fun AssistantScreen(
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty state
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun EmptyState(assistantName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 60.dp, bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Avatar glow
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(CraigTeal.copy(alpha = 0.25f), Color.Transparent)
+                        )
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(CraigSurface2),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("C", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = CraigTeal)
+            }
+        }
+
+        Text(
+            "Hi, I'm $assistantName",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = CraigOnSurface
+        )
+        Text(
+            "Your business assistant. Tap the mic or type to get started.",
+            fontSize = 14.sp,
+            color = CraigSubtle,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp),
+            lineHeight = 21.sp
+        )
+
+        // Quick action chips
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            listOf("Check rankings", "List clients", "Run SEO report").forEach { action ->
+                SuggestionChip(
+                    onClick = {},
+                    label = { Text(action, fontSize = 12.sp) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = CraigSurface2,
+                        labelColor = CraigTealLight
+                    )
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Message bubbles
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
 private fun MessageBubble(
     message: ConversationViewModel.DisplayMessage,
@@ -226,56 +300,95 @@ private fun MessageBubble(
     val isUser = message.role == "user"
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Bottom
     ) {
+        // Craig avatar dot for assistant messages
+        if (!isUser) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(CraigSurface2),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("C", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CraigTeal)
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+
         Box(
             modifier = Modifier
-                .widthIn(max = 300.dp)
+                .widthIn(max = 290.dp)
                 .clip(
                     RoundedCornerShape(
-                        topStart = 16.dp, topEnd = 16.dp,
-                        bottomStart = if (isUser) 16.dp else 4.dp,
-                        bottomEnd = if (isUser) 4.dp else 16.dp
+                        topStart = 18.dp, topEnd = 18.dp,
+                        bottomStart = if (isUser) 18.dp else 4.dp,
+                        bottomEnd = if (isUser) 4.dp else 18.dp
                     )
                 )
-                .background(if (isUser) UserBubble else AssistantBubble)
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .background(if (isUser) UserBubble else CraigSurface2)
+                .then(
+                    if (!isUser) Modifier.padding(start = 3.dp) else Modifier
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Text(
                 text = message.content,
-                color = if (isPartial) CraigOnSurface.copy(alpha = 0.5f) else CraigOnSurface,
-                fontSize = 15.sp
+                color = if (isPartial) CraigSubtle else CraigOnSurface,
+                fontSize = 15.sp,
+                lineHeight = 22.sp
             )
         }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Thinking indicator
+// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun ThinkingIndicator(label: String) {
     val infiniteTransition = rememberInfiniteTransition(label = "thinking")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
         label = "alpha"
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(CraigAccent.copy(alpha = alpha))
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            label.ifBlank { "Craig is thinking…" },
-            color = CraigOnSurface.copy(alpha = 0.6f),
-            fontSize = 14.sp
-        )
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(start = 36.dp)
+    ) {
+        repeat(3) { i ->
+            val dotAlpha by rememberInfiniteTransition(label = "dot$i").animateFloat(
+                initialValue = 0.2f, targetValue = 0.9f,
+                animationSpec = infiniteRepeatable(
+                    tween(400, delayMillis = i * 130),
+                    RepeatMode.Reverse
+                ),
+                label = "d"
+            )
+            Box(
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(CraigTeal.copy(alpha = dotAlpha))
+            )
+        }
+        if (label.isNotBlank()) {
+            Spacer(Modifier.width(8.dp))
+            Text(label, color = CraigSubtle, fontSize = 13.sp)
+        }
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Input bar
+// ─────────────────────────────────────────────────────────────────────────────
+
 @Composable
-private fun StatusAndControls(
+private fun InputBar(
     uiState: ConversationViewModel.UiState,
     sttState: SpeechToTextManager.SttState,
     onMicPressed: () -> Unit,
@@ -286,8 +399,8 @@ private fun StatusAndControls(
 
     val pulsing = rememberInfiniteTransition(label = "pulse")
     val scale by pulsing.animateFloat(
-        initialValue = 1f, targetValue = 1.15f,
-        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+        initialValue = 1f, targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(tween(550), RepeatMode.Reverse),
         label = "scale"
     )
 
@@ -297,119 +410,133 @@ private fun StatusAndControls(
     val isSpeaking = uiState is ConversationViewModel.UiState.Speaking
     val isIdle = uiState is ConversationViewModel.UiState.Idle
 
+    // Status strip
+    val statusText: String? = when {
+        isListening -> "Listening…"
+        isSpeaking  -> (uiState as? ConversationViewModel.UiState.Speaking)?.text?.take(55) ?: "Speaking…"
+        uiState is ConversationViewModel.UiState.Thinking -> uiState.partial.ifBlank { "Thinking…" }
+        uiState is ConversationViewModel.UiState.Error -> uiState.message
+        else -> null
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, CraigBackground),
+                    startY = 0f,
+                    endY = 40f
+                )
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        // Status label — only shown when something is happening
-        val statusText = when {
-            isListening -> "Listening…"
-            isSpeaking  -> (uiState as? ConversationViewModel.UiState.Speaking)?.text?.take(60) ?: "Speaking…"
-            uiState is ConversationViewModel.UiState.Thinking -> uiState.partial.ifBlank { "Thinking…" }
-            uiState is ConversationViewModel.UiState.Error -> uiState.message
-            else -> null
-        }
-        if (statusText != null) {
+        AnimatedVisibility(visible = statusText != null) {
             Text(
-                statusText,
-                color = CraigOnSurface.copy(alpha = 0.7f),
-                fontSize = 13.sp,
+                text = statusText ?: "",
+                color = if (uiState is ConversationViewModel.UiState.Error) CraigError else CraigSubtle,
+                fontSize = 12.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 6.dp)
             )
         }
 
-        // Input row: text field + action button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom
+        // Input row
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = CraigSurface,
+            tonalElevation = 2.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            OutlinedTextField(
-                value = textInput,
-                onValueChange = { textInput = it },
-                placeholder = {
-                    Text(
-                        if (isListening) "Listening…" else "Type a message…",
-                        fontSize = 14.sp,
-                        color = CraigOnSurface.copy(alpha = 0.4f)
-                    )
-                },
-                modifier = Modifier.weight(1f),
-                maxLines = 4,
-                enabled = isIdle,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = {
-                        val t = textInput.trim()
-                        if (t.isNotEmpty() && isIdle) {
-                            onSendText(t)
-                            textInput = ""
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                OutlinedTextField(
+                    value = textInput,
+                    onValueChange = { textInput = it },
+                    placeholder = {
+                        Text(
+                            if (isListening) "Listening…" else "Ask anything…",
+                            fontSize = 15.sp,
+                            color = CraigSubtle
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                    maxLines = 5,
+                    enabled = isIdle,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            val t = textInput.trim()
+                            if (t.isNotEmpty() && isIdle) { onSendText(t); textInput = "" }
+                        }
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        disabledBorderColor = Color.Transparent,
+                        focusedTextColor = CraigOnSurface,
+                        unfocusedTextColor = CraigOnSurface,
+                        disabledTextColor = CraigSubtle,
+                        cursorColor = CraigTeal
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                )
+
+                Spacer(Modifier.width(4.dp))
+
+                // Action button
+                when {
+                    textInput.isNotBlank() && isIdle -> {
+                        FilledIconButton(
+                            onClick = {
+                                val t = textInput.trim()
+                                if (t.isNotEmpty()) { onSendText(t); textInput = "" }
+                            },
+                            modifier = Modifier.size(48.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigTeal)
+                        ) {
+                            Icon(Icons.Default.Send, contentDescription = "Send",
+                                tint = CraigBackground, modifier = Modifier.size(22.dp))
                         }
                     }
-                )
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            // Action button: Send (when typing) → Stop (when speaking) → Mic (otherwise)
-            when {
-                textInput.isNotBlank() && isIdle -> {
-                    FilledIconButton(
-                        onClick = {
-                            val t = textInput.trim()
-                            if (t.isNotEmpty()) { onSendText(t); textInput = "" }
-                        },
-                        modifier = Modifier.size(56.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = CraigBlue
-                        )
-                    ) {
-                        Icon(Icons.Default.Send, contentDescription = "Send",
-                            modifier = Modifier.size(26.dp))
+                    isSpeaking -> {
+                        FilledIconButton(
+                            onClick = onStopSpeaking,
+                            modifier = Modifier.size(48.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigError)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = "Stop",
+                                modifier = Modifier.size(22.dp))
+                        }
                     }
-                }
-                isSpeaking -> {
-                    FilledIconButton(
-                        onClick = onStopSpeaking,
-                        modifier = Modifier.size(56.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = CraigError
-                        )
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = "Stop speaking",
-                            modifier = Modifier.size(26.dp))
+                    isListening -> {
+                        FilledIconButton(
+                            onClick = {},
+                            modifier = Modifier.size(48.dp).scale(scale),
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigTeal)
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = "Listening",
+                                tint = CraigBackground, modifier = Modifier.size(22.dp))
+                        }
                     }
-                }
-                isListening -> {
-                    FilledIconButton(
-                        onClick = { },
-                        modifier = Modifier.size(56.dp).scale(scale),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = CraigAccent
-                        )
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = "Listening",
-                            tint = Color.Black, modifier = Modifier.size(26.dp))
-                    }
-                }
-                else -> {
-                    FilledIconButton(
-                        onClick = onMicPressed,
-                        modifier = Modifier.size(56.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = CraigBlue
-                        )
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = "Speak",
-                            modifier = Modifier.size(26.dp))
+                    else -> {
+                        FilledIconButton(
+                            onClick = onMicPressed,
+                            modifier = Modifier.size(48.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigBlue)
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = "Speak",
+                                modifier = Modifier.size(22.dp))
+                        }
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
     }
 }

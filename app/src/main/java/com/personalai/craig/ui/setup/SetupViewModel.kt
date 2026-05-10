@@ -23,8 +23,9 @@ class SetupViewModel @Inject constructor(
     val isSetupComplete: StateFlow<Boolean> = prefs.isSetupComplete
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _saveSuccess = MutableSharedFlow<Unit>()
-    val saveSuccess = _saveSuccess.asSharedFlow()
+    // true = go to briefing, false = go straight to main (briefing already done)
+    private val _navigateNext = MutableSharedFlow<Boolean>()
+    val navigateNext = _navigateNext.asSharedFlow()
 
     private val _error = MutableSharedFlow<String>()
     val error = _error.asSharedFlow()
@@ -48,24 +49,23 @@ class SetupViewModel @Inject constructor(
                 opticSeoUsername = opticSeoUsername.trim(),
                 opticSeoPassword = opticSeoPassword
             )
-            // Start wake word service
             context.startForegroundService(WakeWordService.startIntent(context))
-            _saveSuccess.emit(Unit)
+            val needsBriefing = !prefs.isBriefingComplete.first()
+            _navigateNext.emit(needsBriefing)
         }
     }
 
     fun openBatteryOptimizationSettings(context: Context) {
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
 
     fun openAccessibilitySettings(context: Context) {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
+        })
     }
 }
