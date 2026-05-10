@@ -98,10 +98,10 @@ class WakeWordService : Service() {
     private fun onWakeWordDetected() {
         Log.i(TAG, "Wake word detected — launching AssistantActivity")
 
-        // Haptic feedback
+        // Haptic feedback — safe-call since Vibrator may be null on some devices
         try {
-            val vibrator = getSystemService(Vibrator::class.java)
-            vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
+            getSystemService(Vibrator::class.java)
+                ?.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
         } catch (e: Exception) { /* ignore */ }
 
         // Pause listening while STT is active in AssistantActivity
@@ -130,7 +130,8 @@ class WakeWordService : Service() {
             setShowBadge(false)
             setSound(null, null)
         }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        getSystemService(NotificationManager::class.java)
+            ?.createNotificationChannel(channel)
     }
 
     private fun buildNotification(text: String): Notification {
@@ -155,8 +156,8 @@ class WakeWordService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification(text))
+        getSystemService(NotificationManager::class.java)
+            ?.notify(NOTIF_ID, buildNotification(text))
     }
 
     override fun onDestroy() {

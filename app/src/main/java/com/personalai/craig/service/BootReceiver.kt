@@ -43,7 +43,7 @@ class BootReceiver : BroadcastReceiver() {
             .build()
 
         context.getSystemService(NotificationManager::class.java)
-            .notify(NOTIF_ID, notification)
+            ?.notify(NOTIF_ID, notification)
     }
 
     private fun createChannel(context: Context) {
@@ -52,6 +52,7 @@ class BootReceiver : BroadcastReceiver() {
             "Craig startup",
             NotificationManager.IMPORTANCE_DEFAULT
         )
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        context.getSystemService(NotificationManager::class.java)
+            ?.createNotificationChannel(channel)
     }
 }
