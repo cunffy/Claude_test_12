@@ -53,8 +53,8 @@ class OpticSEOSession @Inject constructor(
         try {
             // Navigate to the app — it will redirect to login if not authenticated
             manager.navigate(APP_URL)
-            // Give SPA time to settle and potentially redirect to a login page
-            delay(2_500)
+            // Give SPA time to fully settle and execute authentication checks
+            delay(4_000)
 
             val pageContent = manager.readPageContent().lowercase()
             val currentUrl  = manager.getCurrentUrl().lowercase()
@@ -106,11 +106,14 @@ class OpticSEOSession @Inject constructor(
             }
             if (!submitted) manager.submitForm("form")
 
-            // Wait for post-login navigation
-            delay(3_000)
+            // Wait for post-login redirect and SPA render
+            delay(5_000)
 
             val postPage = manager.readPageContent().lowercase()
-            isLoggedIn = LOGGED_IN_INDICATORS.any { postPage.contains(it) } &&
+            val postUrl  = manager.getCurrentUrl().lowercase()
+            // Consider logged in if we're on the app domain and not stuck on a login page
+            isLoggedIn = postUrl.contains("opticseoservices.com") &&
+                    !postUrl.contains("login") &&
                     !LOGIN_INDICATORS.all { postPage.contains(it) }
 
             if (!isLoggedIn) Log.e(TAG, "Login seems to have failed — post-login page:\n${postPage.take(500)}")
@@ -123,7 +126,7 @@ class OpticSEOSession @Inject constructor(
         }
     }
 
-    fun logout() {
+    suspend fun logout() {
         isLoggedIn = false
         manager.clearSession()
     }

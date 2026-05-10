@@ -4,11 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.personalai.craig.data.preferences.SecurePreferences
-import com.personalai.craig.service.WakeWordService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
@@ -20,8 +18,6 @@ class SetupViewModel @Inject constructor(
     private val prefs: SecurePreferences,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
-
-    companion object { private const val TAG = "SetupViewModel" }
 
     val isSetupComplete: StateFlow<Boolean> = prefs.isSetupComplete
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -36,11 +32,14 @@ class SetupViewModel @Inject constructor(
     private val _error = MutableSharedFlow<String>()
     val error = _error.asSharedFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     // Expose current values so the settings screen can pre-populate
     val savedAssistantName: Flow<String> = prefs.assistantName
     val savedVoiceGender: Flow<String>   = prefs.voiceGender
 
-    /** Called on first-time setup. Saves, starts service, navigates forward. */
+    /** Called on first-time setup. Saves credentials and navigates forward. */
     fun saveAndContinue(
         claudeKey: String,
         assistantName: String,
@@ -53,20 +52,20 @@ class SetupViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            prefs.saveSetupData(
-                claudeKey        = claudeKey.trim(),
-                assistantName    = assistantName.trim().ifBlank { "Craig" },
-                voiceGender      = voiceGender,
-                opticSeoUsername = opticSeoUsername.trim(),
-                opticSeoPassword = opticSeoPassword
-            )
+            _isLoading.value = true
             try {
-                context.startForegroundService(WakeWordService.startIntent(context))
-            } catch (e: Exception) {
-                Log.w(TAG, "Could not start WakeWordService: ${e.message}")
+                prefs.saveSetupData(
+                    claudeKey        = claudeKey.trim(),
+                    assistantName    = assistantName.trim().ifBlank { "Craig" },
+                    voiceGender      = voiceGender,
+                    opticSeoUsername = opticSeoUsername.trim(),
+                    opticSeoPassword = opticSeoPassword
+                )
+                val needsBriefing = !prefs.isBriefingComplete.first()
+                _navigateNext.emit(needsBriefing)
+            } finally {
+                _isLoading.value = false
             }
-            val needsBriefing = !prefs.isBriefingComplete.first()
-            _navigateNext.emit(needsBriefing)
         }
     }
 
@@ -80,14 +79,19 @@ class SetupViewModel @Inject constructor(
         opticSeoPassword: String
     ) {
         viewModelScope.launch {
-            prefs.saveSetupData(
-                claudeKey        = claudeKey.trim().ifBlank { prefs.claudeApiKey.first() ?: "" },
-                assistantName    = assistantName.trim().ifBlank { "Craig" },
-                voiceGender      = voiceGender,
-                opticSeoUsername = opticSeoUsername.trim().ifBlank { prefs.opticSeoUsername.first() ?: "" },
-                opticSeoPassword = opticSeoPassword.ifBlank { prefs.opticSeoPassword.first() ?: "" }
-            )
-            _saveOnlyDone.emit(Unit)
+            _isLoading.value = true
+            try {
+                prefs.saveSetupData(
+                    claudeKey        = claudeKey.trim().ifBlank { prefs.claudeApiKey.first() ?: "" },
+                    assistantName    = assistantName.trim().ifBlank { "Craig" },
+                    voiceGender      = voiceGender,
+                    opticSeoUsername = opticSeoUsername.trim().ifBlank { prefs.opticSeoUsername.first() ?: "" },
+                    opticSeoPassword = opticSeoPassword.ifBlank { prefs.opticSeoPassword.first() ?: "" }
+                )
+                _saveOnlyDone.emit(Unit)
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 
@@ -98,11 +102,5 @@ class SetupViewModel @Inject constructor(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
-    }
-
-    fun openAccessibilitySettings(context: Context) {
-        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        })
     }
 }

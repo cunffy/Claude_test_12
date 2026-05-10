@@ -2,9 +2,11 @@ package com.personalai.craig.ui.main
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import com.personalai.craig.service.WakeWordService
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +34,15 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+
+    override fun onResume() {
+        super.onResume()
+        try {
+            startForegroundService(WakeWordService.startIntent(this))
+        } catch (e: Exception) {
+            Log.w("MainActivity", "Could not start WakeWordService: ${e.message}")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

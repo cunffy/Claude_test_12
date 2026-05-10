@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.personalai.craig.data.preferences.SecurePreferences
 import com.personalai.craig.ui.main.MainActivity
@@ -79,8 +80,8 @@ class SetupActivity : ComponentActivity() {
                 }
 
                 SetupScreen(
-                    viewModel     = viewModel,
-                    snackbarState = snackbarState,
+                    viewModel      = viewModel,
+                    snackbarState  = snackbarState,
                     isSettingsMode = isSettingsMode
                 )
             }
@@ -122,6 +123,8 @@ private fun SetupScreen(
     var showClaudeKey by remember { mutableStateOf(false) }
     var showSeoPass   by remember { mutableStateOf(false) }
 
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+
     // In settings mode, pre-populate non-sensitive fields
     if (isSettingsMode) {
         LaunchedEffect(Unit) {
@@ -129,8 +132,6 @@ private fun SetupScreen(
             voiceGender   = viewModel.savedVoiceGender.first()
         }
     }
-
-    val context = androidx.compose.ui.platform.LocalContext.current
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarState) }) { padding ->
         Column(
@@ -183,7 +184,7 @@ private fun SetupScreen(
             SectionHeader("Claude API Key")
             Text(
                 if (isSettingsMode) "Leave blank to keep existing key"
-                else "Get yours free at platform.anthropic.com",
+                else "Get yours at platform.anthropic.com",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
@@ -204,7 +205,7 @@ private fun SetupScreen(
             SectionHeader("OpticSEO Login")
             Text(
                 if (isSettingsMode) "Leave blank to keep existing credentials"
-                else "Craig will use these to log in and control your OpticSEO website.",
+                else "Craig will use these to log in and manage your OpticSEO site.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
@@ -233,29 +234,36 @@ private fun SetupScreen(
 
             Button(
                 onClick = {
-                    if (isSettingsMode) {
-                        viewModel.saveOnly(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
-                    } else {
-                        viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                    if (!isLoading) {
+                        if (isSettingsMode) {
+                            viewModel.saveOnly(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                        } else {
+                            viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                        }
                     }
                 },
+                enabled = !isLoading,
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text(if (isSettingsMode) "Save changes" else "Continue", fontSize = 16.sp)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                } else {
+                    Text(if (isSettingsMode) "Save changes" else "Continue", fontSize = 16.sp)
+                }
             }
 
             if (!isSettingsMode) {
                 OutlinedButton(
-                    onClick = { viewModel.openBatteryOptimizationSettings(context) },
+                    onClick = { viewModel.openBatteryOptimizationSettings(
+                        androidx.compose.ui.platform.LocalContext.current
+                    ) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Disable battery optimization (recommended)")
-                }
-                OutlinedButton(
-                    onClick = { viewModel.openAccessibilitySettings(context) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Enable Accessibility (screen reading)")
                 }
             }
         }

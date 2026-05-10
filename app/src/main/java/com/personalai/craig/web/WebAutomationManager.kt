@@ -2,8 +2,6 @@ package com.personalai.craig.web
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebSettings
@@ -31,8 +29,6 @@ class WebAutomationManager @Inject constructor(
         private const val DEFAULT_TIMEOUT_MS = 8_000L
         private const val NAV_TIMEOUT_MS = 15_000L
     }
-
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     @get:SuppressLint("SetJavaScriptEnabled")
     private val webView: WebView by lazy {
@@ -121,12 +117,11 @@ class WebAutomationManager @Inject constructor(
      * Read the current page's URL and visible text content.
      */
     suspend fun readPageContent(): String {
-        val url = withContext(Dispatchers.Main) { webView.url ?: "unknown" }
         val text = evaluateJs(
             """
             (function() {
                 var body = document.body ? document.body.innerText : '';
-                return 'URL: ' + window.location.href + '\n\nPage content:\n' + body.substring(0, 3000);
+                return 'URL: ' + window.location.href + '\n\nPage content:\n' + body.substring(0, 10000);
             })()
             """.trimIndent()
         )
@@ -179,13 +174,11 @@ class WebAutomationManager @Inject constructor(
             }
         }
 
-    fun getCurrentUrl(): String = webView.url ?: ""
+    suspend fun getCurrentUrl(): String = withContext(Dispatchers.Main) { webView.url ?: "" }
 
-    fun clearSession() {
-        mainHandler.post {
-            webView.clearCache(true)
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-        }
+    suspend fun clearSession() = withContext(Dispatchers.Main) {
+        webView.clearCache(true)
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
     }
 }
