@@ -49,9 +49,7 @@ class WebAutomationManager @Inject constructor(
             }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
-            // Give the WebView explicit phone-sized dimensions so SPA viewport
-            // calculations work. Without this, window.innerWidth = 0 and React/Vue
-            // forms may never render their DOM elements.
+            // Phone-sized viewport so SPA layout calculations work
             val w = 1080
             val h = 2340
             wv.measure(
@@ -59,24 +57,45 @@ class WebAutomationManager @Inject constructor(
                 View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
             )
             wv.layout(0, 0, w, h)
+            // Resume JS timers — headless WebViews start paused on some builds
+            wv.resumeTimers()
+            @Suppress("DEPRECATION") wv.onResume()
+            // Default WebViewClient that bypasses bot-detection on every page load
+            wv.webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                    // Unset navigator.webdriver so the site doesn't detect automation
+                    view.evaluateJavascript(
+                        "(function(){try{Object.defineProperty(navigator,'webdriver',{get:()=>false})}catch(e){}})();",
+                        null
+                    )
+                }
+                @SuppressLint("WebViewClientOnReceivedSslError")
+                override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                    handler.proceed()
+                }
+            }
         }
     }
 
     /**
      * Navigate to a URL and wait for the page to finish loading.
-     * invokeOnCancellation stops the WebView load if the calling coroutine is cancelled,
-     * preventing stale navigations from interfering with the next operation.
+     * Uses a temporary WebViewClient that restores the default one after navigation.
      */
     suspend fun navigate(url: String): String = withContext(Dispatchers.Main) {
         withTimeoutOrNull(NAV_TIMEOUT_MS) {
             suspendCancellableCoroutine { cont ->
                 webView.webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                        view.evaluateJavascript(
+                            "(function(){try{Object.defineProperty(navigator,'webdriver',{get:()=>false})}catch(e){}})();",
+                            null
+                        )
+                    }
                     override fun onPageFinished(view: WebView, url: String) {
                         if (cont.isActive) cont.resume("Navigated to $url")
                     }
                     @SuppressLint("WebViewClientOnReceivedSslError")
                     override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                        // Proceed through SSL errors for automated web access only.
                         handler.proceed()
                     }
                 }
@@ -123,16 +142,25 @@ class WebAutomationManager @Inject constructor(
 
     /**
      * Fill an input field with a value.
+     * Uses the native HTMLInputElement.prototype.value setter so React/Vue synthetic
+     * event handlers fire correctly (plain el.value= assignment bypasses them).
      */
     suspend fun fillInput(selector: String, value: String): String = evaluateJs(
         """
         (function() {
             var el = document.querySelector('${selector.replace("'", "\\'")}');
             if (!el) return 'input not found: ${selector.replace("'", "\\'")}';
+            el.scrollIntoView();
             el.focus();
-            el.value = '${value.replace("'", "\\'")}';
+            try {
+                var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeSetter.call(el, '${value.replace("'", "\\'")}');
+            } catch(e) {
+                el.value = '${value.replace("'", "\\'")}';
+            }
             el.dispatchEvent(new Event('input', {bubbles:true}));
             el.dispatchEvent(new Event('change', {bubbles:true}));
+            el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
             return 'filled input with value';
         })()
         """.trimIndent()

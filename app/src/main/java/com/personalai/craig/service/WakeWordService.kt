@@ -32,6 +32,7 @@ class WakeWordService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     @Volatile private var isPaused = false
     @Volatile private var shouldStop = false
+    @Volatile private var lastTriggerMs = 0L
     private var audioRecord: AudioRecord? = null
     private var recognizer: Recognizer? = null
     private var model: Model? = null
@@ -137,9 +138,9 @@ class WakeWordService : Service() {
                 val nread = audioRecord?.read(buf, 0, buf.size) ?: break
                 if (nread <= 0) continue
                 if (recognizer?.acceptWaveForm(buf, nread) == true) {
+                    // Only check the committed full result — partialResult causes too many
+                    // false positives and spurious vibrations when the app is backgrounded.
                     checkForWakeWord(recognizer?.result)
-                } else {
-                    checkForWakeWord(recognizer?.partialResult)
                 }
             }
         } finally {
@@ -153,7 +154,11 @@ class WakeWordService : Service() {
         if (json == null) return
         val lower = json.lowercase()
         if (WAKE_PHRASES.any { lower.contains(it) }) {
-            onWakeWordDetected()
+            val now = System.currentTimeMillis()
+            if (now - lastTriggerMs > 5_000) {   // 5-second debounce between triggers
+                lastTriggerMs = now
+                onWakeWordDetected()
+            }
         }
     }
 

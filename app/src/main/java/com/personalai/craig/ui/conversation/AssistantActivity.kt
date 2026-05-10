@@ -1,6 +1,7 @@
 package com.personalai.craig.ui.conversation
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -139,7 +140,14 @@ class AssistantActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        startService(WakeWordService.pauseIntent(this))
+        try { startService(WakeWordService.pauseIntent(this)) } catch (e: Exception) { }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Re-trigger auto-listen if woken again while already open
+        if (intent.getStringExtra(EXTRA_TRIGGER) == TRIGGER_WAKE_WORD) requestMicAndListen()
     }
 }
 
