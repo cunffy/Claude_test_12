@@ -2,14 +2,11 @@ package com.personalai.craig.web
 
 import android.util.Log
 import com.personalai.craig.data.preferences.SecurePreferences
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Manages authentication state for the OpticSEO website.
- * Handles login, session detection, and re-authentication on expiry.
- */
 @Singleton
 class OpticSEOSession @Inject constructor(
     private val manager: WebAutomationManager,
@@ -17,37 +14,36 @@ class OpticSEOSession @Inject constructor(
 ) {
     companion object {
         private const val TAG = "OpticSEOSession"
-        private const val BASE_URL = "https://www.opticseoservices.com"
-        private val LOGIN_INDICATORS = listOf("login", "sign in", "log in", "password", "email", "signin")
-        private val LOGGED_IN_INDICATORS = listOf("dashboard", "logout", "log out", "sign out", "account", "clients")
+        const val APP_URL = "https://opticseoservices.com/app"
+        private val LOGGED_IN_INDICATORS = listOf(
+            "dashboard", "logout", "log out", "sign out", "clients", "reports", "settings"
+        )
+        private val LOGIN_INDICATORS = listOf("login", "sign in", "password", "email")
     }
 
     private var isLoggedIn = false
 
-    /**
-     * Ensures the session is authenticated. Logs in if needed.
-     */
     suspend fun ensureLoggedIn(): Boolean {
         if (isLoggedIn) {
-            val page = manager.readPageContent().lowercase()
-            if (LOGGED_IN_INDICATORS.any { page.contains(it) }) return true
+            // Re-verify the session is still active
+            val url = manager.getCurrentUrl()
+            if (url.contains("opticseoservices.com/app") && !url.contains("login")) {
+                val page = manager.readPageContent().lowercase()
+                if (LOGGED_IN_INDICATORS.any { page.contains(it) }) return true
+            }
             isLoggedIn = false
         }
-
         return attemptLogin()
     }
 
-    /**
-     * Navigate to the OpticSEO home/dashboard.
-     */
-    suspend fun navigateHome(): String {
+    suspend fun navigateToApp(): String {
         ensureLoggedIn()
-        return manager.navigate(BASE_URL)
+        return manager.navigate(APP_URL)
     }
 
     private suspend fun attemptLogin(): Boolean {
         val username = prefs.opticSeoUsername.first()
-        val password = prefs.opticSeoPassword.first()
+        val password  = prefs.opticSeoPassword.first()
 
         if (username.isNullOrBlank() || password.isNullOrBlank()) {
             Log.e(TAG, "OpticSEO credentials not configured")
@@ -55,72 +51,73 @@ class OpticSEOSession @Inject constructor(
         }
 
         try {
-            // Navigate to the site and check if already logged in
-            manager.navigate(BASE_URL)
-            val pageContent = manager.readPageContent().lowercase()
+            // Navigate to the app — it will redirect to login if not authenticated
+            manager.navigate(APP_URL)
+            // Give SPA time to settle and potentially redirect to a login page
+            delay(2_500)
 
-            if (LOGGED_IN_INDICATORS.any { pageContent.contains(it) }) {
+            val pageContent = manager.readPageContent().lowercase()
+            val currentUrl  = manager.getCurrentUrl().lowercase()
+
+            // Already logged in?
+            if (LOGGED_IN_INDICATORS.any { pageContent.contains(it) } &&
+                !LOGIN_INDICATORS.any { currentUrl.contains(it) }) {
+                Log.i(TAG, "Already logged in")
                 isLoggedIn = true
                 return true
             }
 
-            // Try to find and fill the login form
-            // Common login form patterns — try email field first
+            Log.i(TAG, "Login form expected — attempting to fill credentials")
+
+            // Fill email / username field
             val emailSelectors = listOf(
                 "input[type='email']",
                 "input[name='email']",
                 "input[id='email']",
                 "input[name='username']",
+                "input[placeholder*='email' i]",
                 "input[type='text']"
             )
             var emailFilled = false
             for (sel in emailSelectors) {
-                val result = manager.fillInput(sel, username)
-                if (!result.contains("not found")) {
-                    emailFilled = true
-                    break
-                }
+                val r = manager.fillInput(sel, username)
+                if (!r.contains("not found")) { emailFilled = true; break }
             }
-
             if (!emailFilled) {
-                Log.e(TAG, "Could not find email/username field on login page")
+                Log.e(TAG, "Could not find email field — page content:\n$pageContent")
                 return false
             }
 
-            // Fill password
             manager.fillInput("input[type='password']", password)
 
-            // Submit the form
+            // Small delay so React/Vue state can update before we try to submit
+            delay(400)
+
+            // Submit
             val submitSelectors = listOf(
                 "button[type='submit']",
                 "input[type='submit']",
-                "button:contains('Login')",
-                "button:contains('Sign in')"
+                "button"   // last resort — click first button
             )
             var submitted = false
             for (sel in submitSelectors) {
-                val result = manager.clickBySelector(sel)
-                if (!result.contains("not found")) {
-                    submitted = true
-                    break
-                }
+                val r = manager.clickBySelector(sel)
+                if (!r.contains("not found")) { submitted = true; break }
             }
-            if (!submitted) {
-                manager.submitForm("form")
-            }
+            if (!submitted) manager.submitForm("form")
 
-            // Wait for post-login redirect
-            kotlinx.coroutines.delay(2000)
-            val postLoginPage = manager.readPageContent().lowercase()
+            // Wait for post-login navigation
+            delay(3_000)
 
-            isLoggedIn = LOGGED_IN_INDICATORS.any { postLoginPage.contains(it) }
-            if (!isLoggedIn) {
-                Log.e(TAG, "Login may have failed — post-login indicators not found")
-            }
+            val postPage = manager.readPageContent().lowercase()
+            isLoggedIn = LOGGED_IN_INDICATORS.any { postPage.contains(it) } &&
+                    !LOGIN_INDICATORS.all { postPage.contains(it) }
+
+            if (!isLoggedIn) Log.e(TAG, "Login seems to have failed — post-login page:\n${postPage.take(500)}")
             return isLoggedIn
 
         } catch (e: Exception) {
-            Log.e(TAG, "Login attempt failed: ${e.message}", e)
+            Log.e(TAG, "Login attempt threw: ${e.message}", e)
             isLoggedIn = false
             return false
         }

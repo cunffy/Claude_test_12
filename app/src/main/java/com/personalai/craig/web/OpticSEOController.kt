@@ -36,19 +36,22 @@ class OpticSEOController @Inject constructor(
         userCommand: String,
         conversationHistory: List<ClaudeClient.Message>
     ): String {
-        // Ensure we're logged in before doing anything
         val loggedIn = session.ensureLoggedIn()
         if (!loggedIn) {
-            return "I couldn't log in to your OpticSEO account. Please check your credentials in Craig's settings."
+            return "I couldn't log in to OpticSEO. Please check your credentials in Settings."
         }
 
-        // Read current page state for Claude's context
-        val currentPage = webManager.readPageContent()
+        // Make sure we're on the app URL before reading page state
+        val currentUrl = webManager.getCurrentUrl()
+        if (!currentUrl.contains("opticseoservices.com/app")) {
+            webManager.navigate(OpticSEOSession.APP_URL)
+        }
 
+        val currentPage = webManager.readPageContent()
         val augmentedCommand = """
             $userCommand
 
-            Current OpticSEO page state:
+            Current OpticSEO page:
             $currentPage
         """.trimIndent()
 

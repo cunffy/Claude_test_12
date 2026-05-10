@@ -44,7 +44,11 @@ class MainActivity : ComponentActivity() {
                     onOpenConversation = { id -> openAssistant(id) },
                     onDeleteConversation = { id -> viewModel.deleteConversation(id) },
                     onOpenSettings = {
-                        startActivity(Intent(this, SetupActivity::class.java))
+                        startActivity(
+                            Intent(this, SetupActivity::class.java).apply {
+                                putExtra(SetupActivity.EXTRA_SETTINGS_MODE, true)
+                            }
+                        )
                     }
                 )
             }

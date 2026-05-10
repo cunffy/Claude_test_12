@@ -31,38 +31,58 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class SetupActivity : ComponentActivity() {
 
+    companion object {
+        /** Pass true to open as a credential-editing screen (no auto-redirect). */
+        const val EXTRA_SETTINGS_MODE = "settings_mode"
+    }
+
     private val viewModel: SetupViewModel by viewModels()
     @Inject lateinit var prefs: SecurePreferences
 
     private val assistantRoleLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* proceed regardless of result */ }
+    ) { /* proceed regardless */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        lifecycleScope.launch {
-            if (prefs.isSetupComplete.first()) {
-                // Setup done — skip to briefing or main
-                if (prefs.isBriefingComplete.first()) navigateToMain()
-                else navigateToBriefing()
-                return@launch
-            }
+        val isSettingsMode = intent.getBooleanExtra(EXTRA_SETTINGS_MODE, false)
 
-            // Stay on setup screen; watch for save completion
-            viewModel.navigateNext.collect { needsBriefing ->
-                requestAssistantRole()
-                if (needsBriefing) navigateToBriefing() else navigateToMain()
+        if (!isSettingsMode) {
+            // First-launch flow: skip setup if already done, navigate forward after save
+            lifecycleScope.launch {
+                if (prefs.isSetupComplete.first()) {
+                    if (prefs.isBriefingComplete.first()) navigateToMain()
+                    else navigateToBriefing()
+                    return@launch
+                }
+                viewModel.navigateNext.collect { needsBriefing ->
+                    requestAssistantRole()
+                    if (needsBriefing) navigateToBriefing() else navigateToMain()
+                }
             }
         }
 
         setContent {
             CraigTheme {
                 val snackbarState = remember { SnackbarHostState() }
+
                 LaunchedEffect(Unit) {
                     viewModel.error.collect { msg -> snackbarState.showSnackbar(msg) }
                 }
-                SetupScreen(viewModel = viewModel, snackbarState = snackbarState)
+                if (isSettingsMode) {
+                    LaunchedEffect(Unit) {
+                        viewModel.saveOnlyDone.collect {
+                            snackbarState.showSnackbar("Settings saved")
+                        }
+                    }
+                }
+
+                SetupScreen(
+                    viewModel     = viewModel,
+                    snackbarState = snackbarState,
+                    isSettingsMode = isSettingsMode
+                )
             }
         }
     }
@@ -89,7 +109,11 @@ class SetupActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostState) {
+private fun SetupScreen(
+    viewModel: SetupViewModel,
+    snackbarState: SnackbarHostState,
+    isSettingsMode: Boolean
+) {
     var claudeKey     by remember { mutableStateOf("") }
     var assistantName by remember { mutableStateOf("Craig") }
     var voiceGender   by remember { mutableStateOf("male") }
@@ -97,6 +121,14 @@ private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostSt
     var opticSeoPass  by remember { mutableStateOf("") }
     var showClaudeKey by remember { mutableStateOf(false) }
     var showSeoPass   by remember { mutableStateOf(false) }
+
+    // In settings mode, pre-populate non-sensitive fields
+    if (isSettingsMode) {
+        LaunchedEffect(Unit) {
+            assistantName = viewModel.savedAssistantName.first()
+            voiceGender   = viewModel.savedVoiceGender.first()
+        }
+    }
 
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -109,10 +141,19 @@ private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostSt
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Welcome to Craig", fontSize = 28.sp, fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary)
-            Text("Your personal business assistant. Let's get you set up.",
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+            Text(
+                if (isSettingsMode) "Settings" else "Welcome to Craig",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                if (isSettingsMode)
+                    "Leave a credential field blank to keep the existing value."
+                else
+                    "Your personal business assistant. Let's get you set up.",
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
 
             Spacer(Modifier.height(8.dp))
 
@@ -140,12 +181,16 @@ private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostSt
 
             Spacer(Modifier.height(4.dp))
             SectionHeader("Claude API Key")
-            Text("Get yours free at platform.anthropic.com",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text(
+                if (isSettingsMode) "Leave blank to keep existing key"
+                else "Get yours free at platform.anthropic.com",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
             OutlinedTextField(
                 value = claudeKey,
                 onValueChange = { claudeKey = it },
-                label = { Text("Claude API key") },
+                label = { Text(if (isSettingsMode) "New API key (optional)" else "Claude API key") },
                 visualTransformation = if (showClaudeKey) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     TextButton(onClick = { showClaudeKey = !showClaudeKey }) {
@@ -157,19 +202,23 @@ private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostSt
             )
 
             SectionHeader("OpticSEO Login")
-            Text("Craig will use these to log in and control your OpticSEO website.",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Text(
+                if (isSettingsMode) "Leave blank to keep existing credentials"
+                else "Craig will use these to log in and control your OpticSEO website.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
             OutlinedTextField(
                 value = opticSeoUser,
                 onValueChange = { opticSeoUser = it },
-                label = { Text("Email / username") },
+                label = { Text(if (isSettingsMode) "Email (optional)" else "Email / username") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = opticSeoPass,
                 onValueChange = { opticSeoPass = it },
-                label = { Text("Password") },
+                label = { Text(if (isSettingsMode) "Password (optional)" else "Password") },
                 visualTransformation = if (showSeoPass) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     TextButton(onClick = { showSeoPass = !showSeoPass }) {
@@ -184,25 +233,30 @@ private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostSt
 
             Button(
                 onClick = {
-                    viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                    if (isSettingsMode) {
+                        viewModel.saveOnly(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                    } else {
+                        viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Text("Continue", fontSize = 16.sp)
+                Text(if (isSettingsMode) "Save changes" else "Continue", fontSize = 16.sp)
             }
 
-            OutlinedButton(
-                onClick = { viewModel.openBatteryOptimizationSettings(context) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Disable battery optimization (recommended)")
-            }
-
-            OutlinedButton(
-                onClick = { viewModel.openAccessibilitySettings(context) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Enable Accessibility (screen reading)")
+            if (!isSettingsMode) {
+                OutlinedButton(
+                    onClick = { viewModel.openBatteryOptimizationSettings(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Disable battery optimization (recommended)")
+                }
+                OutlinedButton(
+                    onClick = { viewModel.openAccessibilitySettings(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Enable Accessibility (screen reading)")
+                }
             }
         }
     }
@@ -210,7 +264,11 @@ private fun SetupScreen(viewModel: SetupViewModel, snackbarState: SnackbarHostSt
 
 @Composable
 private fun SectionHeader(title: String) {
-    Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+    Text(
+        title,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(top = 8.dp))
+        modifier = Modifier.padding(top = 8.dp)
+    )
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.personalai.craig.data.preferences.SecurePreferences
@@ -20,16 +21,26 @@ class SetupViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
+    companion object { private const val TAG = "SetupViewModel" }
+
     val isSetupComplete: StateFlow<Boolean> = prefs.isSetupComplete
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    // true = go to briefing, false = go straight to main (briefing already done)
-    private val _navigateNext = MutableSharedFlow<Boolean>()
+    // replay=1 prevents the event from being lost if the Activity collects slightly late
+    private val _navigateNext = MutableSharedFlow<Boolean>(replay = 1)
     val navigateNext = _navigateNext.asSharedFlow()
+
+    private val _saveOnlyDone = MutableSharedFlow<Unit>(replay = 1)
+    val saveOnlyDone = _saveOnlyDone.asSharedFlow()
 
     private val _error = MutableSharedFlow<String>()
     val error = _error.asSharedFlow()
 
+    // Expose current values so the settings screen can pre-populate
+    val savedAssistantName: Flow<String> = prefs.assistantName
+    val savedVoiceGender: Flow<String>   = prefs.voiceGender
+
+    /** Called on first-time setup. Saves, starts service, navigates forward. */
     fun saveAndContinue(
         claudeKey: String,
         assistantName: String,
@@ -49,18 +60,44 @@ class SetupViewModel @Inject constructor(
                 opticSeoUsername = opticSeoUsername.trim(),
                 opticSeoPassword = opticSeoPassword
             )
-            context.startForegroundService(WakeWordService.startIntent(context))
+            try {
+                context.startForegroundService(WakeWordService.startIntent(context))
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not start WakeWordService: ${e.message}")
+            }
             val needsBriefing = !prefs.isBriefingComplete.first()
             _navigateNext.emit(needsBriefing)
         }
     }
 
-    fun openBatteryOptimizationSettings(context: Context) {
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /** Called from Settings screen — saves without navigating away.
+     *  Blank credential fields keep the existing stored value. */
+    fun saveOnly(
+        claudeKey: String,
+        assistantName: String,
+        voiceGender: String,
+        opticSeoUsername: String,
+        opticSeoPassword: String
+    ) {
+        viewModelScope.launch {
+            prefs.saveSetupData(
+                claudeKey        = claudeKey.trim().ifBlank { prefs.claudeApiKey.first() ?: "" },
+                assistantName    = assistantName.trim().ifBlank { "Craig" },
+                voiceGender      = voiceGender,
+                opticSeoUsername = opticSeoUsername.trim().ifBlank { prefs.opticSeoUsername.first() ?: "" },
+                opticSeoPassword = opticSeoPassword.ifBlank { prefs.opticSeoPassword.first() ?: "" }
+            )
+            _saveOnlyDone.emit(Unit)
         }
-        context.startActivity(intent)
+    }
+
+    fun openBatteryOptimizationSettings(context: Context) {
+        context.startActivity(
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
     }
 
     fun openAccessibilitySettings(context: Context) {
