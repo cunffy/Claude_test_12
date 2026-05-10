@@ -1,9 +1,17 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+}
+
+// Read secrets from local.properties (gitignored) so they never appear in source control.
+val localProps = Properties().also { props ->
+    val f = rootProject.file("local.properties")
+    if (f.exists()) props.load(f.inputStream())
 }
 
 android {
@@ -17,6 +25,12 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Baked into the APK at compile time; never stored in git.
+        buildConfigField(
+            "String", "CLAUDE_API_KEY",
+            "\"${localProps.getProperty("claude.api.key", "")}\""
+        )
     }
 
     buildTypes {

@@ -15,14 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.*
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.personalai.craig.data.preferences.SecurePreferences
 import com.personalai.craig.ui.main.MainActivity
-import com.personalai.craig.ui.onboarding.BusinessBriefingActivity
 import com.personalai.craig.ui.theme.CraigTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
@@ -50,16 +51,15 @@ class SetupActivity : ComponentActivity() {
         val isSettingsMode = intent.getBooleanExtra(EXTRA_SETTINGS_MODE, false)
 
         if (!isSettingsMode) {
-            // First-launch flow: skip setup if already done, navigate forward after save
+            // First-launch flow: skip setup if already done, navigate to main after save
             lifecycleScope.launch {
                 if (prefs.isSetupComplete.first()) {
-                    if (prefs.isBriefingComplete.first()) navigateToMain()
-                    else navigateToBriefing()
+                    navigateToMain()
                     return@launch
                 }
-                viewModel.navigateNext.collect { needsBriefing ->
+                viewModel.navigateNext.collect {
                     requestAssistantRole()
-                    if (needsBriefing) navigateToBriefing() else navigateToMain()
+                    navigateToMain()
                 }
             }
         }
@@ -98,11 +98,6 @@ class SetupActivity : ComponentActivity() {
         }
     }
 
-    private fun navigateToBriefing() {
-        startActivity(Intent(this, BusinessBriefingActivity::class.java))
-        finish()
-    }
-
     private fun navigateToMain() {
         startActivity(Intent(this, MainActivity::class.java))
         finish()
@@ -115,18 +110,15 @@ private fun SetupScreen(
     snackbarState: SnackbarHostState,
     isSettingsMode: Boolean
 ) {
-    var claudeKey     by remember { mutableStateOf("") }
     var assistantName by remember { mutableStateOf("Craig") }
     var voiceGender   by remember { mutableStateOf("male") }
     var opticSeoUser  by remember { mutableStateOf("") }
     var opticSeoPass  by remember { mutableStateOf("") }
-    var showClaudeKey by remember { mutableStateOf(false) }
     var showSeoPass   by remember { mutableStateOf(false) }
 
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // In settings mode, pre-populate non-sensitive fields
     if (isSettingsMode) {
         LaunchedEffect(Unit) {
             assistantName = viewModel.savedAssistantName.first()
@@ -153,7 +145,7 @@ private fun SetupScreen(
                 if (isSettingsMode)
                     "Leave a credential field blank to keep the existing value."
                 else
-                    "Your personal business assistant. Let's get you set up.",
+                    "Your OpticSEO business assistant. Enter your site login to get started.",
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
 
@@ -182,27 +174,6 @@ private fun SetupScreen(
             }
 
             Spacer(Modifier.height(4.dp))
-            SectionHeader("Claude API Key")
-            Text(
-                if (isSettingsMode) "Leave blank to keep existing key"
-                else "Get yours at platform.anthropic.com",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
-            OutlinedTextField(
-                value = claudeKey,
-                onValueChange = { claudeKey = it },
-                label = { Text(if (isSettingsMode) "New API key (optional)" else "Claude API key") },
-                visualTransformation = if (showClaudeKey) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    TextButton(onClick = { showClaudeKey = !showClaudeKey }) {
-                        Text(if (showClaudeKey) "Hide" else "Show", fontSize = 12.sp)
-                    }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
-
             SectionHeader("OpticSEO Login")
             Text(
                 if (isSettingsMode) "Leave blank to keep existing credentials"
@@ -237,9 +208,9 @@ private fun SetupScreen(
                 onClick = {
                     if (!isLoading) {
                         if (isSettingsMode) {
-                            viewModel.saveOnly(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                            viewModel.saveOnly("", assistantName, voiceGender, opticSeoUser, opticSeoPass)
                         } else {
-                            viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                            viewModel.saveAndContinue("", assistantName, voiceGender, opticSeoUser, opticSeoPass)
                         }
                     }
                 },

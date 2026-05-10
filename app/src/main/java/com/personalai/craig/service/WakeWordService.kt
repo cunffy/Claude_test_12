@@ -70,8 +70,14 @@ class WakeWordService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP   -> { shouldStop = true; stopSelf(); return START_NOT_STICKY }
-            ACTION_PAUSE  -> { isPaused = true;  return START_STICKY }
-            ACTION_RESUME -> { isPaused = false; return START_STICKY }
+            ACTION_PAUSE  -> { isPaused = true; return START_STICKY }
+            ACTION_RESUME -> {
+                isPaused = false
+                // Reset the debounce timer so the service can't immediately re-trigger
+                // the activity that was just closed — gives a clean 5-second window.
+                lastTriggerMs = System.currentTimeMillis()
+                return START_STICKY
+            }
         }
         // On Android 14+, startForeground() with foregroundServiceType=microphone
         // throws SecurityException if RECORD_AUDIO is not yet granted.

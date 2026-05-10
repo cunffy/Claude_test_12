@@ -47,22 +47,17 @@ class SetupViewModel @Inject constructor(
         opticSeoUsername: String,
         opticSeoPassword: String
     ) {
-        if (claudeKey.isBlank()) {
-            viewModelScope.launch { _error.emit("Claude API key is required") }
-            return
-        }
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 prefs.saveSetupData(
-                    claudeKey        = claudeKey.trim(),
+                    claudeKey        = claudeKey.trim(), // blank → SecurePreferences uses built-in key
                     assistantName    = assistantName.trim().ifBlank { "Craig" },
                     voiceGender      = voiceGender,
                     opticSeoUsername = opticSeoUsername.trim(),
                     opticSeoPassword = opticSeoPassword
                 )
-                val needsBriefing = !prefs.isBriefingComplete.first()
-                _navigateNext.emit(needsBriefing)
+                _navigateNext.emit(false) // briefing is hardcoded, never show the briefing screen
             } finally {
                 _isLoading.value = false
             }

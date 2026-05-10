@@ -23,6 +23,26 @@ class MemoryManager @Inject constructor(
         private const val TAG = "MemoryManager"
         private const val SUMMARIZE_CUTOFF_MS = 24 * 60 * 60 * 1000L
         private const val MAX_MESSAGES_PER_SUMMARY = 50
+
+        // Hardcoded so the assistant has its OpticSEO instructions from the very first launch
+        // without requiring the user to fill in a briefing screen.
+        const val HARDCODED_BRIEFING = """I run an SEO company. Here is everything you need to know about what I expect you to do:
+
+Get familiar with all the tabs and pages within the OpticSEO admin portal at https://www.opticseoservices.com/app.
+
+CHAT SECTION: I can ask you to send chats/messages to specific clients. Go to the chat section, find the client, and send the message.
+
+SEO TOOL TAB: I can ask you to run SEO checks on specific web domains. When I give you a domain, ask me what settings I want before running the check, then run it.
+
+MANAGE CLIENTS (most important):
+- If I say "Run a SEO check on [Client Name]" — go to Manage Clients, find that client, and click the Run SEO Check button.
+- Keyword checks: when I ask for a keyword check on a client, press the keyword check button, ask me what page I want to run it on (based on what options it shows you), then click "Suggest Keywords" and run it once it has added 5 keywords.
+
+MAIL TAB: I can ask you to read emails and interact with them. If I say "Send a sign up link to [Client Name]" — go to the Mail tab, find the most recent mail from that person, and click Send Signup Link.
+
+QUOTES (in Manage Clients): If I ask you to send or update a quote for a client — go to that client in Manage Clients, click Send or Update Quote, ask me what values to input, then send it.
+
+This is not everything you will do — learn as you go. When I give you a new instruction you have not seen before, figure it out by exploring the site."""
     }
 
     /**
@@ -70,10 +90,12 @@ class MemoryManager @Inject constructor(
     }
 
     /**
-     * Returns the raw business briefing text the user entered at onboarding.
+     * Returns the business briefing. Falls back to the hardcoded briefing so
+     * the assistant is fully briefed from the very first launch.
      */
     suspend fun getBusinessBriefing(): String = withContext(Dispatchers.IO) {
-        userMemoryDao.getAll().find { it.key == "business_briefing" }?.value ?: ""
+        userMemoryDao.getAll().find { it.key == "business_briefing" }?.value
+            ?: HARDCODED_BRIEFING
     }
 
     /**
