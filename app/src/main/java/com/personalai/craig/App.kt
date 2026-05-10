@@ -3,8 +3,12 @@ package com.personalai.craig
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.*
+import com.personalai.craig.ai.ClaudeClient
 import com.personalai.craig.service.MemorySummarizationWorker
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -12,15 +16,20 @@ import javax.inject.Inject
 class App : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var claudeClient: ClaudeClient
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
 
+    @OptIn(DelicateCoroutinesApi::class)
     override fun onCreate() {
         super.onCreate()
         scheduleDailyMemorySummarization()
+        // Pre-warm the OkHttpClient thread pool so the first real API call
+        // doesn't incur the ~200-500 ms initialization cost on the main thread.
+        GlobalScope.launch { claudeClient.warmUp() }
     }
 
     private fun scheduleDailyMemorySummarization() {

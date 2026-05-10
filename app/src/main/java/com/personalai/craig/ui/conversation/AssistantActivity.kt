@@ -84,20 +84,25 @@ class AssistantActivity : ComponentActivity() {
                 }
 
                 AssistantScreen(
-                    assistantName = assistantName,
-                    messages      = messages,
-                    uiState       = uiState,
-                    sttState      = sttState,
-                    onMicPressed  = { requestMicAndListen() },
+                    assistantName  = assistantName,
+                    messages       = messages,
+                    uiState        = uiState,
+                    sttState       = sttState,
+                    onMicPressed   = { requestMicAndListen() },
+                    onStopListening = {
+                        sttManager.cancel()
+                        viewModel.setIdleState()
+                    },
                     onStopSpeaking = { viewModel.stopSpeaking() },
-                    onSendText    = { viewModel.processUserInput(it) },
-                    onClose       = { finish() }
+                    onSendText     = { viewModel.processUserInput(it) },
+                    onClose        = { finish() }
                 )
             }
         }
 
+        // Only auto-start listening for wake-word activations, not manual opens.
         val trigger = intent.getStringExtra(EXTRA_TRIGGER)
-        if (trigger == TRIGGER_WAKE_WORD || trigger == TRIGGER_MANUAL) requestMicAndListen()
+        if (trigger == TRIGGER_WAKE_WORD) requestMicAndListen()
     }
 
     private fun requestMicAndListen() {
@@ -135,6 +140,7 @@ private fun AssistantScreen(
     uiState: ConversationViewModel.UiState,
     sttState: SpeechToTextManager.SttState,
     onMicPressed: () -> Unit,
+    onStopListening: () -> Unit,
     onStopSpeaking: () -> Unit,
     onSendText: (String) -> Unit,
     onClose: () -> Unit
@@ -208,11 +214,12 @@ private fun AssistantScreen(
 
             // Input bar
             InputBar(
-                uiState = uiState,
-                sttState = sttState,
-                onMicPressed = onMicPressed,
+                uiState        = uiState,
+                sttState       = sttState,
+                onMicPressed   = onMicPressed,
+                onStopListening = onStopListening,
                 onStopSpeaking = onStopSpeaking,
-                onSendText = onSendText
+                onSendText     = onSendText
             )
         }
     }
@@ -392,6 +399,7 @@ private fun InputBar(
     uiState: ConversationViewModel.UiState,
     sttState: SpeechToTextManager.SttState,
     onMicPressed: () -> Unit,
+    onStopListening: () -> Unit,
     onStopSpeaking: () -> Unit,
     onSendText: (String) -> Unit
 ) {
@@ -515,11 +523,11 @@ private fun InputBar(
                     }
                     isListening -> {
                         FilledIconButton(
-                            onClick = {},
+                            onClick = onStopListening,
                             modifier = Modifier.size(48.dp).scale(scale),
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigTeal)
                         ) {
-                            Icon(Icons.Default.Mic, contentDescription = "Listening",
+                            Icon(Icons.Default.MicOff, contentDescription = "Stop listening",
                                 tint = CraigBackground, modifier = Modifier.size(22.dp))
                         }
                     }

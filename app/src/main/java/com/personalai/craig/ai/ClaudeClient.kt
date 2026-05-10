@@ -42,6 +42,13 @@ class ClaudeClient @Inject constructor(
     private suspend fun apiKey(): String =
         prefs.claudeApiKey.first() ?: error("Claude API key not configured")
 
+    /** Forces OkHttp's thread pool and connection pool to initialize off the main thread. */
+    suspend fun warmUp(): Unit = withContext(Dispatchers.IO) {
+        try {
+            okHttpClient.connectionPool.connectionCount()
+        } catch (_: Exception) { /* pool init is the goal, errors are fine */ }
+    }
+
     /**
      * Send a conversation to Claude and return the full text response.
      */
