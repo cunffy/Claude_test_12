@@ -34,7 +34,7 @@ class WebAutomationManager @Inject constructor(
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    @SuppressLint("SetJavaScriptEnabled")
+    @get:SuppressLint("SetJavaScriptEnabled")
     private val webView: WebView by lazy {
         WebView(context).also { wv ->
             mainHandler.post {

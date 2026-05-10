@@ -70,7 +70,7 @@ class ClaudeClient @Inject constructor(
 
         val request = Request.Builder()
             .url(API_URL)
-            .post(body)
+            .post(body.toRequestBody(JSON))
             .header("x-api-key", key)
             .header("anthropic-version", API_VERSION)
             .header("content-type", "application/json")
