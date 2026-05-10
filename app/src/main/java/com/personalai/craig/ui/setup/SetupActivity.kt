@@ -124,6 +124,7 @@ private fun SetupScreen(
     var showSeoPass   by remember { mutableStateOf(false) }
 
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // In settings mode, pre-populate non-sensitive fields
     if (isSettingsMode) {
@@ -258,9 +259,7 @@ private fun SetupScreen(
 
             if (!isSettingsMode) {
                 OutlinedButton(
-                    onClick = { viewModel.openBatteryOptimizationSettings(
-                        androidx.compose.ui.platform.LocalContext.current
-                    ) },
+                    onClick = { viewModel.openBatteryOptimizationSettings(context) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Disable battery optimization (recommended)")
