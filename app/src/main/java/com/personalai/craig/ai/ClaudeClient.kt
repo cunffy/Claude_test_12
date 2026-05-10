@@ -203,15 +203,23 @@ class ClaudeClient @Inject constructor(
         val body = buildRequestBody(
             messages = listOf(Message("user", conversationText)),
             systemPrompt = """
-                You are a fact extraction assistant. Given a conversation, extract personal facts
-                about the USER (not the assistant). Return ONLY a valid JSON array with objects having
-                keys: "key" (snake_case identifier), "value" (extracted value), "source"
-                (one of: user_stated, inferred).
-                Example: [{"key":"name","value":"Alice","source":"user_stated"}]
-                If no facts can be extracted, return []. Output only the JSON array, nothing else.
+                You are a memory extraction assistant. Given a conversation between a user and their AI assistant (Craig), extract important facts worth remembering for future conversations.
+
+                Capture facts about:
+                1. THE USER: name, age, location, occupation, family, personality, communication style, preferences, habits
+                2. THEIR BUSINESS: business name, industry, services offered, business goals, recurring challenges
+                3. THEIR WEBSITE (OpticSEO): client names encountered, SEO tasks performed, site issues found, any URLs or login details mentioned
+                4. PREFERENCES & PATTERNS: how they like to be helped, topics they care about, recurring tasks, things to avoid
+
+                Return ONLY a valid JSON array. Each object must have:
+                - "key": descriptive snake_case identifier (e.g. "user_name", "client_pine_pienaar_status", "prefers_brief_answers", "opticseo_login_url")
+                - "value": the specific fact to remember — be precise and useful
+                - "source": "user_stated" or "inferred"
+
+                Return [] if there is genuinely nothing worth remembering. Output ONLY the JSON array, no other text.
             """.trimIndent(),
             model = MODEL_SONNET,
-            maxTokens = 512
+            maxTokens = 768
         )
         val response = executeRequest(body)
         parseTextResponse(response)

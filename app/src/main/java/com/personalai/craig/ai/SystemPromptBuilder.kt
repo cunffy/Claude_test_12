@@ -20,7 +20,7 @@ class SystemPromptBuilder @Inject constructor(
     private val prefs: SecurePreferences
 ) {
     companion object {
-        private const val MAX_MEMORY_CHARS  = 3_000
+        private const val MAX_MEMORY_CHARS  = 6_000
         private const val MAX_SCREEN_CHARS  = 1_500
         private const val SCREEN_MAX_AGE_MS = 30_000L
     }
@@ -78,10 +78,11 @@ class SystemPromptBuilder @Inject constructor(
             }
 
             appendLine("## Instructions")
-            appendLine("- Keep voice responses concise: 2-4 sentences unless the user asks for detail.")
-            appendLine("- Do not use markdown formatting in voice responses (no **, ##, or bullet symbols).")
+            appendLine("- Keep responses concise and conversational unless the user asks for detail or types a detailed question.")
+            appendLine("- Do not use markdown formatting (no **, ##, or bullet symbols) — respond in plain natural sentences.")
+            appendLine("- Actively remember everything the user tells you about themselves, their business, their clients, and their website.")
+            appendLine("- When you learn something new about the user, acknowledge it naturally and use it in future responses.")
             appendLine("- If unsure about a personal fact, ask rather than assume.")
-            appendLine("- Remember and use details the user shares about themselves.")
             appendLine("- Respond in the user's language if they speak in a language other than English.")
         }.trimEnd()
     }

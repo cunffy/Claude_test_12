@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -92,6 +95,7 @@ class AssistantActivity : ComponentActivity() {
                     sttState = sttState,
                     onMicPressed = { requestMicAndListen() },
                     onStopSpeaking = { viewModel.stopSpeaking() },
+                    onSendText = { viewModel.processUserInput(it) },
                     onClose = { finish() }
                 )
             }
@@ -141,6 +145,7 @@ private fun AssistantScreen(
     sttState: SpeechToTextManager.SttState,
     onMicPressed: () -> Unit,
     onStopSpeaking: () -> Unit,
+    onSendText: (String) -> Unit,
     onClose: () -> Unit
 ) {
     val listState = rememberLazyListState()
@@ -201,12 +206,13 @@ private fun AssistantScreen(
                 }
             }
 
-            // Status + mic button
+            // Text input + mic / stop controls
             StatusAndControls(
                 uiState = uiState,
                 sttState = sttState,
                 onMicPressed = onMicPressed,
-                onStopSpeaking = onStopSpeaking
+                onStopSpeaking = onStopSpeaking,
+                onSendText = onSendText
             )
         }
     }
@@ -273,8 +279,11 @@ private fun StatusAndControls(
     uiState: ConversationViewModel.UiState,
     sttState: SpeechToTextManager.SttState,
     onMicPressed: () -> Unit,
-    onStopSpeaking: () -> Unit
+    onStopSpeaking: () -> Unit,
+    onSendText: (String) -> Unit
 ) {
+    var textInput by remember { mutableStateOf("") }
+
     val pulsing = rememberInfiniteTransition(label = "pulse")
     val scale by pulsing.animateFloat(
         initialValue = 1f, targetValue = 1.15f,
@@ -286,64 +295,121 @@ private fun StatusAndControls(
             sttState is SpeechToTextManager.SttState.Listening ||
             sttState is SpeechToTextManager.SttState.Partial
     val isSpeaking = uiState is ConversationViewModel.UiState.Speaking
+    val isIdle = uiState is ConversationViewModel.UiState.Idle
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        // Status label
+        // Status label — only shown when something is happening
         val statusText = when {
             isListening -> "Listening…"
             isSpeaking  -> (uiState as? ConversationViewModel.UiState.Speaking)?.text?.take(60) ?: "Speaking…"
             uiState is ConversationViewModel.UiState.Thinking -> uiState.partial.ifBlank { "Thinking…" }
             uiState is ConversationViewModel.UiState.Error -> uiState.message
-            else -> "Tap to speak"
+            else -> null
         }
-        Text(statusText, color = CraigOnSurface.copy(alpha = 0.7f), fontSize = 13.sp,
-            textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 12.dp))
-
-        // Main mic / stop button
-        when {
-            isSpeaking -> {
-                FilledIconButton(
-                    onClick = onStopSpeaking,
-                    modifier = Modifier.size(72.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = CraigError
-                    )
-                ) {
-                    Icon(Icons.Default.Stop, contentDescription = "Stop speaking",
-                        modifier = Modifier.size(32.dp))
-                }
-            }
-            isListening -> {
-                FilledIconButton(
-                    onClick = { /* tap to stop early */ },
-                    modifier = Modifier.size(72.dp).scale(scale),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = CraigAccent
-                    )
-                ) {
-                    Icon(Icons.Default.Mic, contentDescription = "Listening",
-                        tint = Color.Black, modifier = Modifier.size(32.dp))
-                }
-            }
-            else -> {
-                FilledIconButton(
-                    onClick = onMicPressed,
-                    modifier = Modifier.size(72.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = CraigBlue
-                    )
-                ) {
-                    Icon(Icons.Default.Mic, contentDescription = "Speak",
-                        modifier = Modifier.size(32.dp))
-                }
-            }
+        if (statusText != null) {
+            Text(
+                statusText,
+                color = CraigOnSurface.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            )
         }
 
-        Spacer(Modifier.height(16.dp))
+        // Input row: text field + action button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom
+        ) {
+            OutlinedTextField(
+                value = textInput,
+                onValueChange = { textInput = it },
+                placeholder = {
+                    Text(
+                        if (isListening) "Listening…" else "Type a message…",
+                        fontSize = 14.sp,
+                        color = CraigOnSurface.copy(alpha = 0.4f)
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                maxLines = 4,
+                enabled = isIdle,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        val t = textInput.trim()
+                        if (t.isNotEmpty() && isIdle) {
+                            onSendText(t)
+                            textInput = ""
+                        }
+                    }
+                )
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            // Action button: Send (when typing) → Stop (when speaking) → Mic (otherwise)
+            when {
+                textInput.isNotBlank() && isIdle -> {
+                    FilledIconButton(
+                        onClick = {
+                            val t = textInput.trim()
+                            if (t.isNotEmpty()) { onSendText(t); textInput = "" }
+                        },
+                        modifier = Modifier.size(56.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = CraigBlue
+                        )
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = "Send",
+                            modifier = Modifier.size(26.dp))
+                    }
+                }
+                isSpeaking -> {
+                    FilledIconButton(
+                        onClick = onStopSpeaking,
+                        modifier = Modifier.size(56.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = CraigError
+                        )
+                    ) {
+                        Icon(Icons.Default.Stop, contentDescription = "Stop speaking",
+                            modifier = Modifier.size(26.dp))
+                    }
+                }
+                isListening -> {
+                    FilledIconButton(
+                        onClick = { },
+                        modifier = Modifier.size(56.dp).scale(scale),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = CraigAccent
+                        )
+                    ) {
+                        Icon(Icons.Default.Mic, contentDescription = "Listening",
+                            tint = Color.Black, modifier = Modifier.size(26.dp))
+                    }
+                }
+                else -> {
+                    FilledIconButton(
+                        onClick = onMicPressed,
+                        modifier = Modifier.size(56.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = CraigBlue
+                        )
+                    ) {
+                        Icon(Icons.Default.Mic, contentDescription = "Speak",
+                            modifier = Modifier.size(26.dp))
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
     }
 }
