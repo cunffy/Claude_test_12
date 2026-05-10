@@ -12,9 +12,12 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -64,7 +67,6 @@ class AssistantActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            // Permission just granted for the first time — start the wake word service now.
             try { startForegroundService(WakeWordService.startIntent(this)) }
             catch (e: Exception) { /* ignore */ }
             startListening()
@@ -98,23 +100,22 @@ class AssistantActivity : ComponentActivity() {
                 }
 
                 AssistantScreen(
-                    assistantName  = assistantName,
-                    messages       = messages,
-                    uiState        = uiState,
-                    sttState       = sttState,
-                    onMicPressed   = { requestMicAndListen() },
+                    assistantName   = assistantName,
+                    messages        = messages,
+                    uiState         = uiState,
+                    sttState        = sttState,
+                    onMicPressed    = { requestMicAndListen() },
                     onStopListening = {
                         sttManager.cancel()
                         viewModel.setIdleState()
                     },
-                    onStopSpeaking = { viewModel.stopSpeaking() },
-                    onSendText     = { viewModel.processUserInput(it) },
-                    onClose        = { finish() }
+                    onStopSpeaking  = { viewModel.stopSpeaking() },
+                    onSendText      = { viewModel.processUserInput(it) },
+                    onClose         = { finish() }
                 )
             }
         }
 
-        // Only auto-start listening for wake-word activations, not manual opens.
         val trigger = intent.getStringExtra(EXTRA_TRIGGER)
         if (trigger == TRIGGER_WAKE_WORD) requestMicAndListen()
     }
@@ -132,8 +133,6 @@ class AssistantActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        // reset() clears any pending mainHandler retries so they don't fire
-        // after the activity is gone and start an unexpected listening session.
         sttManager.reset()
         try { startService(WakeWordService.resumeIntent(this)) } catch (e: Exception) { }
     }
@@ -146,7 +145,6 @@ class AssistantActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // Re-trigger auto-listen if woken again while already open
         if (intent.getStringExtra(EXTRA_TRIGGER) == TRIGGER_WAKE_WORD) requestMicAndListen()
     }
 }
@@ -173,76 +171,170 @@ private fun AssistantScreen(
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 
-    Scaffold(
-        containerColor = CraigBackground,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(assistantName, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                        Text(
-                            "Business Assistant",
-                            fontSize = 12.sp,
-                            color = CraigTeal,
-                            fontWeight = FontWeight.Normal
+    // Ambient background orbs for depth
+    Box(modifier = Modifier.fillMaxSize().background(CraigBackground)) {
+        Box(
+            modifier = Modifier
+                .size(400.dp)
+                .offset(x = (-80).dp, y = (-60).dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(CraigPurpleGlow.copy(alpha = 0.08f), Color.Transparent)
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .size(300.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 60.dp, y = 80.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(CraigTeal.copy(alpha = 0.06f), Color.Transparent)
+                    )
+                )
+        )
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AvatarDot(size = 36)
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    assistantName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    color = CraigOnSurface
+                                )
+                                Text(
+                                    "Business Assistant",
+                                    fontSize = 11.sp,
+                                    color = CraigTeal,
+                                    fontWeight = FontWeight.Medium,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onClose) {
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Close",
+                                tint = CraigSubtle,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = CraigOnSurface
+                    )
+                )
+            }
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (messages.isEmpty()) {
+                        item { EmptyState(assistantName = assistantName, onSendText = onSendText) }
+                    }
+
+                    items(messages.size, key = { it }) { index ->
+                        MessageBubble(
+                            message = messages[index],
+                            modifier = Modifier.animateItem()
                         )
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onClose) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close",
-                            tint = CraigSubtle)
+
+                    if (sttState is SpeechToTextManager.SttState.Partial) {
+                        item {
+                            MessageBubble(
+                                message = ConversationViewModel.DisplayMessage(
+                                    "user", sttState.text + "…"
+                                ),
+                                isPartial = true
+                            )
+                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = CraigBackground,
-                    titleContentColor = CraigOnSurface
+
+                    if (uiState is ConversationViewModel.UiState.Thinking) {
+                        item { ThinkingIndicator(label = uiState.partial) }
+                    }
+                }
+
+                InputBar(
+                    uiState         = uiState,
+                    sttState        = sttState,
+                    onMicPressed    = onMicPressed,
+                    onStopListening = onStopListening,
+                    onStopSpeaking  = onStopSpeaking,
+                    onSendText      = onSendText
                 )
-            )
+            }
         }
-    ) { padding ->
-        Column(
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Avatar composable — reused in top bar and empty state
+// ─────────────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun AvatarDot(size: Int, animate: Boolean = false) {
+    val pulse = rememberInfiniteTransition(label = "avatarPulse")
+    val glowAlpha by pulse.animateFloat(
+        initialValue = if (animate) 0.6f else 0.3f,
+        targetValue = if (animate) 1.0f else 0.3f,
+        animationSpec = infiniteRepeatable(tween(1600, easing = EaseInOut), RepeatMode.Reverse),
+        label = "glow"
+    )
+
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size.dp)) {
+        // Glow ring
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Message list
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (messages.isEmpty()) {
-                    item { EmptyState(assistantName = assistantName) }
-                }
-
-                items(messages) { msg -> MessageBubble(message = msg) }
-
-                // Live partial transcript
-                if (sttState is SpeechToTextManager.SttState.Partial) {
-                    item {
-                        MessageBubble(
-                            message = ConversationViewModel.DisplayMessage("user", sttState.text + "…"),
-                            isPartial = true
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            CraigTeal.copy(alpha = if (animate) glowAlpha * 0.4f else 0.15f),
+                            Color.Transparent
                         )
-                    }
-                }
-
-                // Thinking indicator
-                if (uiState is ConversationViewModel.UiState.Thinking) {
-                    item { ThinkingIndicator(label = uiState.partial) }
-                }
-            }
-
-            // Input bar
-            InputBar(
-                uiState        = uiState,
-                sttState       = sttState,
-                onMicPressed   = onMicPressed,
-                onStopListening = onStopListening,
-                onStopSpeaking = onStopSpeaking,
-                onSendText     = onSendText
+                    ),
+                    shape = CircleShape
+                )
+        )
+        // Inner circle
+        Box(
+            modifier = Modifier
+                .size((size * 0.78f).dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(CraigPurpleDark, CraigSurface2)
+                    )
+                )
+                .border(1.dp, CraigTeal.copy(alpha = 0.5f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "C",
+                fontSize = (size * 0.36f).sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = CraigTeal
             )
         }
     }
@@ -253,65 +345,118 @@ private fun AssistantScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun EmptyState(assistantName: String) {
+private fun EmptyState(assistantName: String, onSendText: (String) -> Unit) {
+    val pulse = rememberInfiniteTransition(label = "emptyPulse")
+
+    val ring1Scale by pulse.animateFloat(
+        initialValue = 1f, targetValue = 1.7f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseOut), RepeatMode.Restart),
+        label = "r1s"
+    )
+    val ring1Alpha by pulse.animateFloat(
+        initialValue = 0.5f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(2200, easing = EaseOut), RepeatMode.Restart),
+        label = "r1a"
+    )
+    val ring2Scale by pulse.animateFloat(
+        initialValue = 1f, targetValue = 1.7f,
+        animationSpec = infiniteRepeatable(tween(2200, delayMillis = 800, easing = EaseOut), RepeatMode.Restart),
+        label = "r2s"
+    )
+    val ring2Alpha by pulse.animateFloat(
+        initialValue = 0.5f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(2200, delayMillis = 800, easing = EaseOut), RepeatMode.Restart),
+        label = "r2a"
+    )
+
+    val suggestions = listOf("Check rankings", "List clients", "Run SEO report", "Who's top ranked?")
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 60.dp, bottom = 32.dp),
+            .padding(top = 64.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Avatar glow
-        Box(contentAlignment = Alignment.Center) {
+        // Animated avatar
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(140.dp)) {
+            // Outer pulsing ring 2
             Box(
                 modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
+                    .size(100.dp)
+                    .scale(ring2Scale)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(CraigTeal.copy(alpha = 0.25f), Color.Transparent)
-                        )
+                            colors = listOf(
+                                CraigTeal.copy(alpha = ring2Alpha * 0.3f),
+                                Color.Transparent
+                            )
+                        ),
+                        shape = CircleShape
                     )
             )
+            // Outer pulsing ring 1
             Box(
                 modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(CraigSurface2),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("C", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = CraigTeal)
-            }
+                    .size(100.dp)
+                    .scale(ring1Scale)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                CraigPurpleGlow.copy(alpha = ring1Alpha * 0.3f),
+                                Color.Transparent
+                            )
+                        ),
+                        shape = CircleShape
+                    )
+            )
+            AvatarDot(size = 96, animate = true)
         }
 
-        Text(
-            "Hi, I'm $assistantName",
-            fontSize = 22.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = CraigOnSurface
-        )
-        Text(
-            "Your business assistant. Tap the mic or type to get started.",
-            fontSize = 14.sp,
-            color = CraigSubtle,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp),
-            lineHeight = 21.sp
-        )
-
-        // Quick action chips
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 8.dp)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf("Check rankings", "List clients", "Run SEO report").forEach { action ->
+            Text(
+                "Hey! I'm $assistantName",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = CraigOnSurface
+            )
+            Text(
+                "Your voice-powered business assistant.\nTap the mic or type to get started.",
+                fontSize = 14.sp,
+                color = CraigSubtle,
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+        }
+
+        // Suggestion chips — horizontally scrollable, all wired to onSendText
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
+        ) {
+            items(suggestions) { action ->
                 SuggestionChip(
-                    onClick = {},
-                    label = { Text(action, fontSize = 12.sp) },
+                    onClick = { onSendText(action) },
+                    label = {
+                        Text(
+                            action,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
                     colors = SuggestionChipDefaults.suggestionChipColors(
                         containerColor = CraigSurface2,
                         labelColor = CraigTealLight
-                    )
+                    ),
+                    border = SuggestionChipDefaults.suggestionChipBorder(
+                        enabled = true,
+                        borderColor = CraigTeal.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(20.dp)
                 )
             }
         }
@@ -325,11 +470,11 @@ private fun EmptyState(assistantName: String) {
 @Composable
 private fun MessageBubble(
     message: ConversationViewModel.DisplayMessage,
-    isPartial: Boolean = false
+    isPartial: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     val isUser = message.role == "user"
 
-    // Decode screenshot once; null if absent or malformed
     val screenshotBitmap = remember(message.imageBase64) {
         message.imageBase64?.let { b64 ->
             try {
@@ -340,59 +485,93 @@ private fun MessageBubble(
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Bottom
     ) {
         if (!isUser) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(CraigSurface2),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("C", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = CraigTeal)
-            }
+            AvatarDot(size = 30)
             Spacer(Modifier.width(8.dp))
         }
 
         Column(
-            modifier = Modifier.widthIn(max = 290.dp),
+            modifier = Modifier.widthIn(max = 295.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            // Screenshot image (shown above the text bubble when present)
             if (screenshotBitmap != null) {
-                androidx.compose.foundation.Image(
+                Image(
                     bitmap = screenshotBitmap.asImageBitmap(),
                     contentDescription = "Screenshot",
                     contentScale = ContentScale.FillWidth,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, CraigSurface2, RoundedCornerShape(14.dp))
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 18.dp, topEnd = 18.dp,
-                            bottomStart = if (isUser) 18.dp else 4.dp,
-                            bottomEnd = if (isUser) 4.dp else 18.dp
+            if (isUser) {
+                // Gradient user bubble
+                Box(
+                    modifier = Modifier
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 18.dp, topEnd = 18.dp,
+                                bottomStart = 18.dp, bottomEnd = 4.dp
+                            )
                         )
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(CraigPurple, CraigBlue.copy(alpha = 0.85f))
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 11.dp)
+                ) {
+                    Text(
+                        text = message.content,
+                        color = if (isPartial) CraigOnSurface.copy(alpha = 0.55f) else CraigOnSurface,
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.Normal
                     )
-                    .background(if (isUser) UserBubble else CraigSurface2)
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = message.content,
-                    color = if (isPartial) CraigSubtle else CraigOnSurface,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
-                )
+                }
+            } else {
+                // Assistant bubble with subtle teal accent border
+                Box(
+                    modifier = Modifier
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 4.dp, topEnd = 18.dp,
+                                bottomStart = 18.dp, bottomEnd = 18.dp
+                            )
+                        )
+                        .background(CraigSurface2)
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    CraigTeal.copy(alpha = 0.35f),
+                                    CraigPurpleGlow.copy(alpha = 0.15f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(
+                                topStart = 4.dp, topEnd = 18.dp,
+                                bottomStart = 18.dp, bottomEnd = 18.dp
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 11.dp)
+                ) {
+                    Text(
+                        text = message.content,
+                        color = if (isPartial) CraigSubtle else CraigOnSurface,
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp
+                    )
+                }
             }
         }
+
+        if (isUser) Spacer(Modifier.width(4.dp))
     }
 }
 
@@ -402,29 +581,32 @@ private fun MessageBubble(
 
 @Composable
 private fun ThinkingIndicator(label: String) {
-    val infiniteTransition = rememberInfiniteTransition(label = "thinking")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-        label = "alpha"
-    )
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 36.dp)
+        modifier = Modifier.padding(start = 44.dp, top = 4.dp)
     ) {
         repeat(3) { i ->
             val dotAlpha by rememberInfiniteTransition(label = "dot$i").animateFloat(
-                initialValue = 0.2f, targetValue = 0.9f,
+                initialValue = 0.2f, targetValue = 1f,
                 animationSpec = infiniteRepeatable(
-                    tween(400, delayMillis = i * 130),
+                    tween(500, delayMillis = i * 160),
                     RepeatMode.Reverse
                 ),
                 label = "d"
             )
+            val dotScale by rememberInfiniteTransition(label = "scale$i").animateFloat(
+                initialValue = 0.7f, targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    tween(500, delayMillis = i * 160),
+                    RepeatMode.Reverse
+                ),
+                label = "ds"
+            )
             Box(
                 modifier = Modifier
-                    .padding(end = 4.dp)
-                    .size(7.dp)
+                    .padding(end = 5.dp)
+                    .size(8.dp)
+                    .scale(dotScale)
                     .clip(CircleShape)
                     .background(CraigTeal.copy(alpha = dotAlpha))
             )
@@ -451,20 +633,12 @@ private fun InputBar(
 ) {
     var textInput by remember { mutableStateOf("") }
 
-    val pulsing = rememberInfiniteTransition(label = "pulse")
-    val scale by pulsing.animateFloat(
-        initialValue = 1f, targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(tween(550), RepeatMode.Reverse),
-        label = "scale"
-    )
-
     val isListening = uiState is ConversationViewModel.UiState.Listening ||
             sttState is SpeechToTextManager.SttState.Listening ||
             sttState is SpeechToTextManager.SttState.Partial
-    val isSpeaking = uiState is ConversationViewModel.UiState.Speaking
-    val isIdle = uiState is ConversationViewModel.UiState.Idle
+    val isSpeaking  = uiState is ConversationViewModel.UiState.Speaking
+    val isIdle      = uiState is ConversationViewModel.UiState.Idle
 
-    // Status strip
     val statusText: String? = when {
         isListening -> "Listening…"
         isSpeaking  -> (uiState as? ConversationViewModel.UiState.Speaking)?.text?.take(55) ?: "Speaking…"
@@ -473,39 +647,81 @@ private fun InputBar(
         else -> null
     }
 
+    // Ripple animation for listening state
+    val ripple = rememberInfiniteTransition(label = "ripple")
+    val r1Scale by ripple.animateFloat(
+        initialValue = 1f, targetValue = 2.2f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = EaseOut), RepeatMode.Restart),
+        label = "r1s"
+    )
+    val r1Alpha by ripple.animateFloat(
+        initialValue = 0.5f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = EaseOut), RepeatMode.Restart),
+        label = "r1a"
+    )
+    val r2Scale by ripple.animateFloat(
+        initialValue = 1f, targetValue = 2.2f,
+        animationSpec = infiniteRepeatable(tween(1100, delayMillis = 380, easing = EaseOut), RepeatMode.Restart),
+        label = "r2s"
+    )
+    val r2Alpha by ripple.animateFloat(
+        initialValue = 0.5f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(1100, delayMillis = 380, easing = EaseOut), RepeatMode.Restart),
+        label = "r2a"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, CraigBackground),
+                    colors = listOf(Color.Transparent, CraigBackground.copy(alpha = 0.95f)),
                     startY = 0f,
-                    endY = 40f
+                    endY = 60f
                 )
             )
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        AnimatedVisibility(visible = statusText != null) {
+        AnimatedVisibility(
+            visible = statusText != null,
+            enter = fadeIn() + slideInVertically(),
+            exit = fadeOut()
+        ) {
             Text(
                 text = statusText ?: "",
-                color = if (uiState is ConversationViewModel.UiState.Error) CraigError else CraigSubtle,
+                color = when {
+                    uiState is ConversationViewModel.UiState.Error -> CraigError
+                    isListening -> CraigTeal
+                    else -> CraigSubtle
+                },
                 fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp)
+                    .padding(bottom = 8.dp)
             )
         }
 
-        // Input row
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(32.dp),
             color = CraigSurface,
-            tonalElevation = 2.dp,
-            modifier = Modifier.fillMaxWidth()
+            tonalElevation = 4.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(
+                    width = 1.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            if (isListening) CraigTeal.copy(alpha = 0.6f) else CraigSurface2,
+                            if (isListening) CraigPurpleGlow.copy(alpha = 0.4f) else CraigSurface2
+                        )
+                    ),
+                    shape = RoundedCornerShape(32.dp)
+                )
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
                 OutlinedTextField(
@@ -537,12 +753,11 @@ private fun InputBar(
                         disabledTextColor = CraigSubtle,
                         cursorColor = CraigTeal
                     ),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(24.dp)
                 )
 
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(6.dp))
 
-                // Action button
                 when {
                     textInput.isNotBlank() && isIdle -> {
                         FilledIconButton(
@@ -550,47 +765,91 @@ private fun InputBar(
                                 val t = textInput.trim()
                                 if (t.isNotEmpty()) { onSendText(t); textInput = "" }
                             },
-                            modifier = Modifier.size(48.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigTeal)
+                            modifier = Modifier.size(50.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = CraigTeal
+                            )
                         ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send",
-                                tint = CraigBackground, modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.Send,
+                                contentDescription = "Send",
+                                tint = CraigBackground,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                     isSpeaking -> {
                         FilledIconButton(
                             onClick = onStopSpeaking,
-                            modifier = Modifier.size(48.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigError)
+                            modifier = Modifier.size(50.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = CraigError
+                            )
                         ) {
-                            Icon(Icons.Default.Stop, contentDescription = "Stop",
-                                modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.Stop,
+                                contentDescription = "Stop speaking",
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                     isListening -> {
-                        FilledIconButton(
-                            onClick = onStopListening,
-                            modifier = Modifier.size(48.dp).scale(scale),
-                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigTeal)
-                        ) {
-                            Icon(Icons.Default.MicOff, contentDescription = "Stop listening",
-                                tint = CraigBackground, modifier = Modifier.size(22.dp))
+                        // Mic button with expanding ripple rings behind it
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(50.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .scale(r1Scale)
+                                    .background(
+                                        CraigTeal.copy(alpha = r1Alpha * 0.25f),
+                                        CircleShape
+                                    )
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .scale(r2Scale)
+                                    .background(
+                                        CraigTeal.copy(alpha = r2Alpha * 0.2f),
+                                        CircleShape
+                                    )
+                            )
+                            FilledIconButton(
+                                onClick = onStopListening,
+                                modifier = Modifier.size(50.dp),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = CraigTeal
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Default.MicOff,
+                                    contentDescription = "Stop listening",
+                                    tint = CraigBackground,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
                     }
                     else -> {
                         FilledIconButton(
                             onClick = onMicPressed,
-                            modifier = Modifier.size(48.dp),
-                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = CraigBlue)
+                            modifier = Modifier.size(50.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = CraigPurple
+                            )
                         ) {
-                            Icon(Icons.Default.Mic, contentDescription = "Speak",
-                                modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = "Speak",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
     }
 }
