@@ -66,8 +66,8 @@ jobs:
         if: failure()
         run: |
           echo "========== FAILED TASKS =========="
-          grep -n "FAILED\|What went wrong\|Caused by\|^e: \|error:" \
-            /tmp/gradle.log | head -80 || echo "(no matching lines)"
+          grep -n "FAILED\|What went wrong\|Caused by\|^e: \|error:\|duplicate\|2 files found\|More than one file" \
+            /tmp/gradle.log | head -100 || echo "(no matching lines)"
           echo ""
           echo "========== LAST 200 LINES =========="
           tail -200 /tmp/gradle.log
