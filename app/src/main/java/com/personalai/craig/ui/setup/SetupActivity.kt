@@ -110,10 +110,12 @@ private fun SetupScreen(
     snackbarState: SnackbarHostState,
     isSettingsMode: Boolean
 ) {
+    var claudeKey     by remember { mutableStateOf("") }
     var assistantName by remember { mutableStateOf("Craig") }
     var voiceGender   by remember { mutableStateOf("male") }
     var opticSeoUser  by remember { mutableStateOf("") }
     var opticSeoPass  by remember { mutableStateOf("") }
+    var showClaudeKey by remember { mutableStateOf(false) }
     var showSeoPass   by remember { mutableStateOf(false) }
 
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
@@ -174,6 +176,28 @@ private fun SetupScreen(
             }
 
             Spacer(Modifier.height(4.dp))
+            SectionHeader("Claude API Key")
+            Text(
+                if (isSettingsMode) "Leave blank to keep existing key"
+                else "Get yours at console.anthropic.com",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            OutlinedTextField(
+                value = claudeKey,
+                onValueChange = { claudeKey = it },
+                label = { Text(if (isSettingsMode) "New API key (optional)" else "Claude API key") },
+                visualTransformation = if (showClaudeKey) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { showClaudeKey = !showClaudeKey }) {
+                        Text(if (showClaudeKey) "Hide" else "Show", fontSize = 12.sp)
+                    }
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(4.dp))
             SectionHeader("OpticSEO Login")
             Text(
                 if (isSettingsMode) "Leave blank to keep existing credentials"
@@ -208,9 +232,9 @@ private fun SetupScreen(
                 onClick = {
                     if (!isLoading) {
                         if (isSettingsMode) {
-                            viewModel.saveOnly("", assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                            viewModel.saveOnly(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
                         } else {
-                            viewModel.saveAndContinue("", assistantName, voiceGender, opticSeoUser, opticSeoPass)
+                            viewModel.saveAndContinue(claudeKey, assistantName, voiceGender, opticSeoUser, opticSeoPass)
                         }
                     }
                 },

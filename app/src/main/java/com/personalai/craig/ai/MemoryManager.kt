@@ -1,6 +1,7 @@
 package com.personalai.craig.ai
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import com.personalai.craig.data.db.dao.ConversationDao
 import com.personalai.craig.data.db.dao.MessageDao
 import com.personalai.craig.data.db.dao.UserMemoryDao
@@ -54,6 +55,8 @@ This is not everything you will do — learn as you go. When I give you a new in
             try {
                 val jsonFacts = claudeClient.extractFacts(conversationText)
                 parseAndStoreFacts(jsonFacts)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Fact extraction failed: ${e.message}")
             }

@@ -47,11 +47,15 @@ class SetupViewModel @Inject constructor(
         opticSeoUsername: String,
         opticSeoPassword: String
     ) {
+        if (claudeKey.isBlank()) {
+            viewModelScope.launch { _error.emit("Claude API key is required") }
+            return
+        }
         viewModelScope.launch {
             _isLoading.value = true
             try {
                 prefs.saveSetupData(
-                    claudeKey        = claudeKey.trim(), // blank → SecurePreferences uses built-in key
+                    claudeKey        = claudeKey.trim(),
                     assistantName    = assistantName.trim().ifBlank { "Craig" },
                     voiceGender      = voiceGender,
                     opticSeoUsername = opticSeoUsername.trim(),

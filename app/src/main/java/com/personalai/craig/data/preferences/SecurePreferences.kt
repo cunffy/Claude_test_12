@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
-import com.personalai.craig.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -25,16 +24,9 @@ class SecurePreferences @Inject constructor(
         val OPTICSEO_PASSWORD   = stringPreferencesKey("opticseo_password")
         val SETUP_COMPLETE      = booleanPreferencesKey("setup_complete")
         val BRIEFING_COMPLETE   = booleanPreferencesKey("briefing_complete")
-
-        // Compiled in from local.properties at build time — never stored in git.
-        // Rotate the key in local.properties and rebuild if it's ever compromised.
-        val BUILTIN_API_KEY: String get() = BuildConfig.CLAUDE_API_KEY
     }
 
-    // Returns the stored key, or the built-in key if nothing has been saved yet.
-    val claudeApiKey: Flow<String?> = context.dataStore.data.map {
-        it[CLAUDE_API_KEY]?.takeIf { k -> k.isNotBlank() } ?: BUILTIN_API_KEY
-    }
+    val claudeApiKey: Flow<String?>       = context.dataStore.data.map { it[CLAUDE_API_KEY] }
     val assistantName: Flow<String>       = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Craig" }
     val voiceGender: Flow<String>         = context.dataStore.data.map { it[VOICE_GENDER] ?: "male" }
     val opticSeoUsername: Flow<String?>   = context.dataStore.data.map { it[OPTICSEO_USERNAME] }
@@ -54,15 +46,13 @@ class SecurePreferences @Inject constructor(
         opticSeoPassword: String
     ) {
         context.dataStore.edit { prefs ->
-            // Only overwrite the stored key if the caller provided one; otherwise keep built-in
-            val keyToStore = claudeKey.trim().ifBlank { BUILTIN_API_KEY }
-            prefs[CLAUDE_API_KEY]    = keyToStore
+            prefs[CLAUDE_API_KEY]    = claudeKey
             prefs[ASSISTANT_NAME]    = assistantName
             prefs[VOICE_GENDER]      = voiceGender
             prefs[OPTICSEO_USERNAME] = opticSeoUsername
             prefs[OPTICSEO_PASSWORD] = opticSeoPassword
             prefs[SETUP_COMPLETE]    = true
-            prefs[BRIEFING_COMPLETE] = true  // briefing is now hardcoded, never show the screen
+            prefs[BRIEFING_COMPLETE] = true
         }
     }
 
@@ -70,4 +60,3 @@ class SecurePreferences @Inject constructor(
         context.dataStore.edit { it.clear() }
     }
 }
-
