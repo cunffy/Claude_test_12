@@ -38,6 +38,7 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+    private var micPermissionRequested = false
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -50,7 +51,9 @@ class MainActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED) {
             tryStartWakeWordService()
-        } else {
+        } else if (!micPermissionRequested) {
+            // Only ask once per session — if denied, don't re-prompt every resume
+            micPermissionRequested = true
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }

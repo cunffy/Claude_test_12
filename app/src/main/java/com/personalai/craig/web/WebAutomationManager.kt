@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.util.Log
+import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -42,10 +43,20 @@ class WebAutomationManager @Inject constructor(
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 cacheMode = WebSettings.LOAD_DEFAULT
-                userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+                userAgentString = "Mozilla/5.0 (Linux; Android 14; RedMagic 9 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
             }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
+            // Give the WebView explicit phone-sized dimensions so SPA viewport
+            // calculations work. Without this, window.innerWidth = 0 and React/Vue
+            // forms may never render their DOM elements.
+            val w = 1080
+            val h = 2340
+            wv.measure(
+                View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)
+            )
+            wv.layout(0, 0, w, h)
         }
     }
 

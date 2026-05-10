@@ -51,9 +51,9 @@ class OpticSEOController @Inject constructor(
             )
         }
 
-        // Make sure we're on the app URL before reading page state
-        val currentUrl = webManager.getCurrentUrl()
-        if (!currentUrl.contains("opticseoservices.com/app")) {
+        // Navigate to app if not already there
+        val currentUrl = webManager.getCurrentUrl().lowercase()
+        if (!currentUrl.contains("opticseoservices.com") || currentUrl.contains("login")) {
             webManager.navigate(OpticSEOSession.APP_URL)
         }
 
