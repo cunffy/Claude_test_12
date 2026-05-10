@@ -18,6 +18,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import java.io.File
@@ -46,6 +47,7 @@ class WakeWordService : Service() {
         // Grammar limits Vosk to only these phrases — faster and more accurate for wake words
         private const val WAKE_GRAMMAR = """["hey craig", "help me craig", "[unk]"]"""
         private val WAKE_PHRASES = listOf("hey craig", "help me craig")
+        private const val MIN_CONFIDENCE = 0.72f  // per-word minimum; below this = ambient noise
 
         const val NOTIF_CHANNEL_ID = "craig_wake_word"
         const val NOTIF_ID = 1001
@@ -153,12 +155,38 @@ class WakeWordService : Service() {
     private fun checkForWakeWord(json: String?) {
         if (json == null) return
         val lower = json.lowercase()
-        if (WAKE_PHRASES.any { lower.contains(it) }) {
-            val now = System.currentTimeMillis()
-            if (now - lastTriggerMs > 5_000) {   // 5-second debounce between triggers
-                lastTriggerMs = now
-                onWakeWordDetected()
+        if (WAKE_PHRASES.none { lower.contains(it) }) return
+
+        // Require a minimum per-word confidence so ambient speech that vaguely
+        // resembles the wake phrase doesn't trigger a false positive.
+        if (minWordConfidence(json) < MIN_CONFIDENCE) {
+            Log.d(TAG, "Wake phrase detected but confidence too low — ignoring: $json")
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (now - lastTriggerMs > 5_000) {
+            lastTriggerMs = now
+            onWakeWordDetected()
+        }
+    }
+
+    /**
+     * Returns the minimum confidence score across all words in a Vosk result JSON.
+     * Vosk result format: {"text":"hey craig","result":[{"conf":0.96,...},{"conf":0.87,...}]}
+     * Returns 1.0 if no result array is present (treat as fully confident).
+     */
+    private fun minWordConfidence(json: String): Float {
+        return try {
+            val arr = JSONObject(json).optJSONArray("result") ?: return 1.0f
+            var min = Float.MAX_VALUE
+            for (i in 0 until arr.length()) {
+                val conf = arr.getJSONObject(i).optDouble("conf", 1.0).toFloat()
+                if (conf < min) min = conf
             }
+            if (min == Float.MAX_VALUE) 1.0f else min
+        } catch (e: Exception) {
+            1.0f
         }
     }
 

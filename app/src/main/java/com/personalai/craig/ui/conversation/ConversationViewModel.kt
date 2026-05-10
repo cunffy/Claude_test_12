@@ -188,6 +188,10 @@ class ConversationViewModel @Inject constructor(
 
                 _uiState.value = UiState.Idle
 
+            } catch (e: CancellationException) {
+                // Must rethrow — swallowing CancellationException breaks structured concurrency
+                // and causes crashes when the activity is swiped away mid-request.
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing input: ${e.message}", e)
                 val errMsg = when {
