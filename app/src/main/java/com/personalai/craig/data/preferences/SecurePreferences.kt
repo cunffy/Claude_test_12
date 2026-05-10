@@ -18,7 +18,6 @@ class SecurePreferences @Inject constructor(
 ) {
     companion object {
         val CLAUDE_API_KEY      = stringPreferencesKey("claude_api_key")
-        val PICOVOICE_KEY       = stringPreferencesKey("picovoice_key")
         val ASSISTANT_NAME      = stringPreferencesKey("assistant_name")
         val VOICE_GENDER        = stringPreferencesKey("voice_gender")
         val OPTICSEO_USERNAME   = stringPreferencesKey("opticseo_username")
@@ -27,7 +26,6 @@ class SecurePreferences @Inject constructor(
     }
 
     val claudeApiKey: Flow<String?>     = context.dataStore.data.map { it[CLAUDE_API_KEY] }
-    val picovoiceKey: Flow<String?>     = context.dataStore.data.map { it[PICOVOICE_KEY] }
     val assistantName: Flow<String>     = context.dataStore.data.map { it[ASSISTANT_NAME] ?: "Craig" }
     val voiceGender: Flow<String>       = context.dataStore.data.map { it[VOICE_GENDER] ?: "male" }
     val opticSeoUsername: Flow<String?> = context.dataStore.data.map { it[OPTICSEO_USERNAME] }
@@ -36,7 +34,6 @@ class SecurePreferences @Inject constructor(
 
     suspend fun saveSetupData(
         claudeKey: String,
-        picoKey: String,
         assistantName: String,
         voiceGender: String,
         opticSeoUsername: String,
@@ -44,7 +41,6 @@ class SecurePreferences @Inject constructor(
     ) {
         context.dataStore.edit { prefs ->
             prefs[CLAUDE_API_KEY]    = claudeKey
-            prefs[PICOVOICE_KEY]     = picoKey
             prefs[ASSISTANT_NAME]    = assistantName
             prefs[VOICE_GENDER]      = voiceGender
             prefs[OPTICSEO_USERNAME] = opticSeoUsername

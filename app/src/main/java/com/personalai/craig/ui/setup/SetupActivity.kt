@@ -75,13 +75,11 @@ class SetupActivity : ComponentActivity() {
 @Composable
 private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
     var claudeKey       by remember { mutableStateOf("") }
-    var picovoiceKey    by remember { mutableStateOf("") }
     var assistantName   by remember { mutableStateOf("Craig") }
     var voiceGender     by remember { mutableStateOf("male") }
     var opticSeoUser    by remember { mutableStateOf("") }
     var opticSeoPass    by remember { mutableStateOf("") }
     var showClaudeKey   by remember { mutableStateOf(false) }
-    var showPicoKey     by remember { mutableStateOf(false) }
     var showSeoPass     by remember { mutableStateOf(false) }
     var snackbarMsg     by remember { mutableStateOf("") }
     val snackbarState   = remember { SnackbarHostState() }
@@ -156,23 +154,6 @@ private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             )
 
-            SectionHeader("Picovoice (Wake Word)")
-            Text("Get your free key at console.picovoice.ai — then generate 'Hey Craig' and 'Help Me Craig' .ppn files and add them to app/src/main/assets/",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-            OutlinedTextField(
-                value = picovoiceKey,
-                onValueChange = { picovoiceKey = it },
-                label = { Text("Picovoice access key") },
-                visualTransformation = if (showPicoKey) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    TextButton(onClick = { showPicoKey = !showPicoKey }) {
-                        Text(if (showPicoKey) "Hide" else "Show", fontSize = 12.sp)
-                    }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth()
-            )
-
             SectionHeader("OpticSEO Access")
             Text("Craig will use these credentials to control your OpticSEO website.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
@@ -202,7 +183,7 @@ private fun SetupScreen(viewModel: SetupViewModel, onComplete: () -> Unit) {
             Button(
                 onClick = {
                     viewModel.saveAndContinue(
-                        claudeKey, picovoiceKey, assistantName,
+                        claudeKey, assistantName,
                         voiceGender, opticSeoUser, opticSeoPass
                     )
                 },

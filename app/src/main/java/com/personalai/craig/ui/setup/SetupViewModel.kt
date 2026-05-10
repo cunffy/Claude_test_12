@@ -31,7 +31,6 @@ class SetupViewModel @Inject constructor(
 
     fun saveAndContinue(
         claudeKey: String,
-        picovoiceKey: String,
         assistantName: String,
         voiceGender: String,
         opticSeoUsername: String,
@@ -41,16 +40,11 @@ class SetupViewModel @Inject constructor(
             viewModelScope.launch { _error.emit("Claude API key is required") }
             return
         }
-        if (picovoiceKey.isBlank()) {
-            viewModelScope.launch { _error.emit("Picovoice access key is required for wake word detection") }
-            return
-        }
         viewModelScope.launch {
             prefs.saveSetupData(
-                claudeKey      = claudeKey.trim(),
-                picoKey        = picovoiceKey.trim(),
-                assistantName  = assistantName.trim().ifBlank { "Craig" },
-                voiceGender    = voiceGender,
+                claudeKey        = claudeKey.trim(),
+                assistantName    = assistantName.trim().ifBlank { "Craig" },
+                voiceGender      = voiceGender,
                 opticSeoUsername = opticSeoUsername.trim(),
                 opticSeoPassword = opticSeoPassword
             )

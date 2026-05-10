@@ -98,7 +98,7 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.coroutines.core)
 
-    implementation(libs.porcupine.android)
+    implementation(libs.vosk.android)
 
     implementation(libs.work.runtime.ktx)
 
