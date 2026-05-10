@@ -29,6 +29,10 @@
     <!-- Battery optimization exemption prompt -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Accessibility service: read on-screen text to give Craig page context -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- ===================== APPLICATION ===================== -->
 
     <application
@@ -102,6 +106,20 @@
             android:exported="false"
             android:foregroundServiceType="microphone"
             android:stopWithTask="false" />
+
+        <!-- ============ ACCESSIBILITY SERVICE ============ -->
+        <service
+            android:name=".service.ContextAccessibilityService"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
         <!-- Disable WorkManager default auto-init; App.kt provides Configuration.Provider -->
         <provider

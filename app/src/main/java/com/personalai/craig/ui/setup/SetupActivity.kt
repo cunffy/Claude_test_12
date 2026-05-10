@@ -264,6 +264,12 @@ private fun SetupScreen(
                 ) {
                     Text("Disable battery optimization (recommended)")
                 }
+                OutlinedButton(
+                    onClick = { viewModel.openAccessibilitySettings(context) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Enable screen reading (accessibility)")
+                }
             }
         }
     }

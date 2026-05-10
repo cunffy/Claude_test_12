@@ -57,7 +57,16 @@ class AssistantActivity : ComponentActivity() {
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> if (granted) startListening() else finish() }
+    ) { granted ->
+        if (granted) {
+            // Permission just granted for the first time — start the wake word service now.
+            try { startForegroundService(WakeWordService.startIntent(this)) }
+            catch (e: Exception) { /* ignore */ }
+            startListening()
+        } else {
+            finish()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

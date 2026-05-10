@@ -1,11 +1,14 @@
 package com.personalai.craig.ui.main
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import com.personalai.craig.service.WakeWordService
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -37,10 +40,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        try {
-            startForegroundService(WakeWordService.startIntent(this))
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Could not start WakeWordService: ${e.message}")
+        // Only start the foreground microphone service when the permission is already granted.
+        // On Android 14+, calling startForeground() with foregroundServiceType=microphone without
+        // RECORD_AUDIO throws a SecurityException, which crashes the app.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
+            try {
+                startForegroundService(WakeWordService.startIntent(this))
+            } catch (e: Exception) {
+                Log.w("MainActivity", "Could not start WakeWordService: ${e.message}")
+            }
         }
     }
 

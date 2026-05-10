@@ -70,6 +70,13 @@ class WakeWordService : Service() {
             ACTION_PAUSE  -> { isPaused = true;  return START_STICKY }
             ACTION_RESUME -> { isPaused = false; return START_STICKY }
         }
+        // On Android 14+, startForeground() with foregroundServiceType=microphone
+        // throws SecurityException if RECORD_AUDIO is not yet granted.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         startForeground(NOTIF_ID, buildNotification("Starting…"))
         serviceScope.launch { run() }
         return START_STICKY

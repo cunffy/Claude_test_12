@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.personalai.craig.ai.MemoryManager
 import com.personalai.craig.data.preferences.SecurePreferences
 import dagger.hilt.android.lifecycle.HiltViewModel
+import android.util.Log
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -30,6 +31,11 @@ class BusinessBriefingViewModel @Inject constructor(
             _isLoading.value = true
             try {
                 memoryManager.storeBriefing(text)
+                prefs.setBriefingComplete()
+                _done.emit(Unit)
+            } catch (e: Exception) {
+                Log.e("BusinessBriefingVM", "Failed to save briefing: ${e.message}", e)
+                // Still navigate forward — briefing storage is best-effort
                 prefs.setBriefingComplete()
                 _done.emit(Unit)
             } finally {
