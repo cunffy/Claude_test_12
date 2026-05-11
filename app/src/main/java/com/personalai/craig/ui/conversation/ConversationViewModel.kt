@@ -15,6 +15,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.MutableSharedFlow
 import javax.inject.Inject
 
 @HiltViewModel
@@ -86,8 +87,15 @@ class ConversationViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, "Craig")
     val assistantName: StateFlow<String> = _assistantName
 
+    private val _autoListen = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val autoListen: SharedFlow<Unit> = _autoListen.asSharedFlow()
+
     private var currentConversationId: Long? = null
     private val conversationHistory = mutableListOf<ClaudeClient.Message>()
+
+    // When true, the next user input is routed to OpticSEO even without keyword match —
+    // used when Craig asks a clarification question mid-task.
+    @Volatile private var pendingWebContext = false
 
     private val processingMutex = Mutex()
 
@@ -160,18 +168,28 @@ class ConversationViewModel @Inject constructor(
                 var responseImageBase64: String? = null
 
                 val captureScreenshot = SCREENSHOT_KEYWORDS.any { userText.lowercase().contains(it) }
-                val needsWebControl = captureScreenshot || OPTICSEO_KEYWORDS.any {
+                val webByKeyword = captureScreenshot || OPTICSEO_KEYWORDS.any {
                     userText.lowercase().contains(it)
                 }
+                // Route through OpticSEO if keywords match OR if Craig asked a question last turn
+                val wasWebContext = pendingWebContext
+                pendingWebContext = false
+                val needsWebControl = webByKeyword || wasWebContext
 
                 if (needsWebControl) {
                     _uiState.value = UiState.Thinking("Checking your OpticSEO site…")
-                    ttsManager.speak("Let me check that on your OpticSEO site.", flushQueue = true)
+                    if (!wasWebContext) {
+                        ttsManager.speak("Let me check that on your OpticSEO site.", flushQueue = true)
+                    }
 
                     val result: OpticSEOController.CommandResult = opticSeoController.executeCommand(
                         userCommand = userText,
                         conversationHistory = conversationHistory.dropLast(1), // exclude current
-                        captureScreenshot = captureScreenshot
+                        captureScreenshot = captureScreenshot,
+                        onProgress = { msg ->
+                            _uiState.value = UiState.Thinking(msg)
+                            ttsManager.speak(msg, flushQueue = false)
+                        }
                     )
                     responseText = result.text
                     responseImageBase64 = result.screenshotBase64
@@ -206,7 +224,17 @@ class ConversationViewModel @Inject constructor(
                     memoryManager.extractAndStoreFactsFromExchange(userText, responseText)
                 }
 
+                // If Craig asked a question, keep OpticSEO context and auto-trigger mic
+                val responseEndsWithQuestion = responseText.trimEnd().endsWith("?")
+                if (responseEndsWithQuestion && needsWebControl) {
+                    pendingWebContext = true
+                }
+
                 _uiState.value = UiState.Idle
+
+                if (responseEndsWithQuestion) {
+                    _autoListen.tryEmit(Unit)
+                }
 
             } catch (e: CancellationException) {
                 // Roll back the pending user message so the next request doesn't end up with

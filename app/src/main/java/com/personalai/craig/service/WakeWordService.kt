@@ -45,9 +45,9 @@ class WakeWordService : Service() {
         private const val MODEL_URL =
             "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
         // Grammar limits Vosk to only these phrases — faster and more accurate for wake words
-        private const val WAKE_GRAMMAR = """["hey craig", "help me craig", "[unk]"]"""
-        private val WAKE_PHRASES = listOf("hey craig", "help me craig")
-        private const val MIN_CONFIDENCE = 0.84f  // per-word minimum; higher = fewer false triggers
+        private const val WAKE_GRAMMAR = """["wake up craig", "help me craig", "[unk]"]"""
+        private val WAKE_PHRASES = listOf("wake up craig", "help me craig")
+        private const val MIN_CONFIDENCE = 0.72f  // per-word minimum; lower = fewer missed triggers
 
         const val NOTIF_CHANNEL_ID = "craig_wake_word"
         const val NOTIF_ID = 1001
@@ -137,7 +137,7 @@ class WakeWordService : Service() {
 
         try {
             audioRecord?.startRecording()
-            updateNotification("Listening for \"Hey Craig\"…")
+            updateNotification("Listening for \"Wake up Craig\"…")
             Log.i(TAG, "Vosk wake word detection started")
 
             val buf = ByteArray(bufSize)

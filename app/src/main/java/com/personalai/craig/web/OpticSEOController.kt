@@ -39,7 +39,8 @@ class OpticSEOController @Inject constructor(
     suspend fun executeCommand(
         userCommand: String,
         conversationHistory: List<ClaudeClient.Message>,
-        captureScreenshot: Boolean = false
+        captureScreenshot: Boolean = false,
+        onProgress: ((String) -> Unit)? = null
     ): CommandResult {
         val hadError = AtomicBoolean(false)
 
@@ -55,6 +56,7 @@ class OpticSEOController @Inject constructor(
             return CommandResult("Here's what's currently on screen.", shot)
         }
 
+        onProgress?.invoke("Connecting to OpticSEO…")
         val loggedIn = session.ensureLoggedIn()
         if (!loggedIn) {
             return CommandResult(
@@ -66,6 +68,7 @@ class OpticSEOController @Inject constructor(
         // Navigate to app if not already there
         val currentUrl = webManager.getCurrentUrl().lowercase()
         if (!currentUrl.contains("opticseoservices.com") || currentUrl.contains("login")) {
+            onProgress?.invoke("Opening your OpticSEO portal.")
             webManager.navigate(OpticSEOSession.APP_URL)
         }
 
@@ -84,7 +87,7 @@ class OpticSEOController @Inject constructor(
             messages = messages,
             systemPrompt = systemPrompt,
             tools = WebTools.ALL,
-            toolExecutor = { toolCall -> executeToolCall(toolCall, hadError) }
+            toolExecutor = { toolCall -> executeToolCall(toolCall, hadError, onProgress) }
         )
 
         val screenshotIfNeeded: String? = if (captureScreenshot || hadError.get()) {
@@ -95,17 +98,37 @@ class OpticSEOController @Inject constructor(
         return CommandResult(responseText, screenshotIfNeeded)
     }
 
-    private suspend fun executeToolCall(toolCall: ToolCall, hadError: AtomicBoolean): ToolResult {
+    private suspend fun executeToolCall(
+        toolCall: ToolCall,
+        hadError: AtomicBoolean,
+        onProgress: ((String) -> Unit)? = null
+    ): ToolResult {
         Log.d(TAG, "Executing tool: ${toolCall.name} with input: ${toolCall.input}")
 
         return try {
             val result = when (toolCall.name) {
                 "navigate" -> {
                     val url = toolCall.input["url"] ?: return ToolResult(toolCall.id, "Missing url parameter", isError = true).also { hadError.set(true) }
+                    when {
+                        url.contains("report", ignoreCase = true) ->
+                            onProgress?.invoke("Heading to the reports section now.")
+                        url.contains("manage", ignoreCase = true) || url.contains("client", ignoreCase = true) ->
+                            onProgress?.invoke("Looking up the client now.")
+                        url.contains("opticseoservices.com") ->
+                            onProgress?.invoke("Navigating the site.")
+                    }
                     webManager.navigate(url)
                 }
                 "click_by_text" -> {
                     val text = toolCall.input["text"] ?: return ToolResult(toolCall.id, "Missing text parameter", isError = true).also { hadError.set(true) }
+                    when {
+                        text.contains("report", ignoreCase = true) ->
+                            onProgress?.invoke("Opening the report now.")
+                        text.contains("seo check", ignoreCase = true) || text.contains("run", ignoreCase = true) ->
+                            onProgress?.invoke("Starting the check, this may take a minute.")
+                        text.contains("keyword", ignoreCase = true) ->
+                            onProgress?.invoke("Running keyword analysis.")
+                    }
                     webManager.clickByText(text)
                 }
                 "click_by_selector" -> {
@@ -123,6 +146,7 @@ class OpticSEOController @Inject constructor(
                 "wait_for_element" -> {
                     val selector = toolCall.input["selector"] ?: return ToolResult(toolCall.id, "Missing selector parameter", isError = true).also { hadError.set(true) }
                     val timeout = toolCall.input["timeout_ms"]?.toLongOrNull() ?: 8000L
+                    onProgress?.invoke("Waiting for the report to finish.")
                     webManager.waitForElement(selector, timeout)
                 }
                 "submit_form" -> {

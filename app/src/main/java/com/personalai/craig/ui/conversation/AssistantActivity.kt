@@ -43,10 +43,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.personalai.craig.service.WakeWordService
 import com.personalai.craig.ui.theme.*
 import com.personalai.craig.voice.SpeechToTextManager
+import com.personalai.craig.voice.TextToSpeechManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -62,6 +67,7 @@ class AssistantActivity : ComponentActivity() {
     private val viewModel: ConversationViewModel by viewModels()
 
     @Inject lateinit var sttManager: SpeechToTextManager
+    @Inject lateinit var ttsManager: TextToSpeechManager
 
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -99,6 +105,16 @@ class AssistantActivity : ComponentActivity() {
                     }
                 }
 
+                // Auto-activate mic whenever Craig ends a response with a question
+                LaunchedEffect(Unit) {
+                    viewModel.autoListen.collect {
+                        // Wait for TTS to start speaking (up to 1s), then wait for it to finish
+                        withTimeoutOrNull(1_000L) { ttsManager.isSpeaking.first { it } }
+                        withTimeoutOrNull(15_000L) { ttsManager.isSpeaking.first { !it } }
+                        requestMicAndListen()
+                    }
+                }
+
                 AssistantScreen(
                     assistantName   = assistantName,
                     messages        = messages,
@@ -117,7 +133,17 @@ class AssistantActivity : ComponentActivity() {
         }
 
         val trigger = intent.getStringExtra(EXTRA_TRIGGER)
-        if (trigger == TRIGGER_WAKE_WORD) requestMicAndListen()
+        if (trigger == TRIGGER_WAKE_WORD) speakGreetingThenListen()
+        else if (trigger == TRIGGER_MANUAL) requestMicAndListen()
+    }
+
+    private fun speakGreetingThenListen() {
+        lifecycleScope.launch {
+            ttsManager.speak("What can I do for you today?", flushQueue = true)
+            withTimeoutOrNull(1_000L) { ttsManager.isSpeaking.first { it } }
+            withTimeoutOrNull(8_000L)  { ttsManager.isSpeaking.first { !it } }
+            requestMicAndListen()
+        }
     }
 
     private fun requestMicAndListen() {
@@ -145,7 +171,7 @@ class AssistantActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getStringExtra(EXTRA_TRIGGER) == TRIGGER_WAKE_WORD) requestMicAndListen()
+        if (intent.getStringExtra(EXTRA_TRIGGER) == TRIGGER_WAKE_WORD) speakGreetingThenListen()
     }
 }
 
