@@ -199,6 +199,8 @@ class WebAutomationManager @Inject constructor(
 
     /**
      * Wait for a CSS selector to appear on the page.
+     * Best for short waits (page load, popup appearance). For long-running tasks like
+     * SEO reports, use [waitForPageText] instead.
      */
     suspend fun waitForElement(selector: String, timeoutMs: Long = DEFAULT_TIMEOUT_MS): String =
         withContext(Dispatchers.Main) {
@@ -209,10 +211,33 @@ class WebAutomationManager @Inject constructor(
                         "document.querySelector(${jsStr(selector)}) !== null"
                     )
                     found = result.contains("true")
-                    if (!found) kotlinx.coroutines.delay(300)
+                    if (!found) kotlinx.coroutines.delay(500)
                 }
                 "element found: $selector"
             } ?: "element not found within timeout: $selector"
+        }
+
+    /**
+     * Poll the page body every 2 seconds until [text] appears anywhere in the visible content.
+     * Use this to detect report completion ("View Report", "Complete", a score number, etc.)
+     * rather than relying on CSS selectors which are fragile on SPAs.
+     * Default timeout is 3 minutes — enough for even the slowest SEO reports.
+     */
+    suspend fun waitForPageText(text: String, timeoutMs: Long = 180_000L): String =
+        withContext(Dispatchers.Main) {
+            withTimeoutOrNull(timeoutMs) {
+                val needle = text.lowercase()
+                var found = false
+                while (!found) {
+                    val pageText = evaluateJsOnMain(
+                        "(function(){ return document.body ? document.body.innerText.toLowerCase() : ''; })()"
+                    )
+                    // evaluateJavascript returns a JSON-encoded string — check contains on raw result too
+                    found = pageText.contains(needle)
+                    if (!found) kotlinx.coroutines.delay(2_000)
+                }
+                "text found: $text"
+            } ?: "text not found within timeout: $text"
         }
 
     /**

@@ -171,7 +171,7 @@ class ClaudeClient @Inject constructor(
     ): String = withContext(Dispatchers.IO) {
         val mutableMessages = messages.toMutableList()
 
-        repeat(10) { // max 10 tool-use rounds to prevent infinite loops
+        repeat(25) { // max 25 tool-use rounds — complex OpticSEO tasks can need 12-18 steps
             val bodyJson = buildToolRequestBody(mutableMessages, systemPrompt, model, tools)
             val responseText = executeRequest(bodyJson)
             val responseJson = JSONObject(responseText)

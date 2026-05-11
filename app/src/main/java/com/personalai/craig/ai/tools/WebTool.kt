@@ -76,10 +76,19 @@ object WebTools {
 
     val WAIT_FOR_ELEMENT = WebToolDefinition(
         name = "wait_for_element",
-        description = "Wait for an element to appear on the page (useful after navigation or form submission).",
+        description = "Wait for a CSS element to appear after navigation or form submission. Use only for short waits (page loads, modal popups). Do NOT use for report completion — use wait_for_page_text instead.",
         parameters = mapOf(
             "selector" to ToolParam("string", "CSS selector to wait for"),
-            "timeout_ms" to ToolParam("string", "Maximum wait time in milliseconds", required = false)
+            "timeout_ms" to ToolParam("string", "Maximum wait time in milliseconds (default 8000)", required = false)
+        )
+    )
+
+    val WAIT_FOR_PAGE_TEXT = WebToolDefinition(
+        name = "wait_for_page_text",
+        description = "Poll the page every 2 seconds until the given text appears anywhere in the visible page content. Use this to detect when a report finishes — e.g. text='View Report' (appears when SEO check is complete), text='Complete', or text='Done'. Much more reliable than wait_for_element for long-running tasks.",
+        parameters = mapOf(
+            "text" to ToolParam("string", "Text to look for anywhere in the page body (case-insensitive)"),
+            "timeout_ms" to ToolParam("string", "Maximum wait in milliseconds (default 180000 = 3 minutes)", required = false)
         )
     )
 
@@ -99,5 +108,5 @@ object WebTools {
         )
     )
 
-    val ALL = listOf(NAVIGATE, CLICK_BY_TEXT, CLICK_BY_SELECTOR, FILL_INPUT, READ_PAGE, WAIT_FOR_ELEMENT, SUBMIT_FORM, EVALUATE_JS)
+    val ALL = listOf(NAVIGATE, CLICK_BY_TEXT, CLICK_BY_SELECTOR, FILL_INPUT, READ_PAGE, WAIT_FOR_ELEMENT, WAIT_FOR_PAGE_TEXT, SUBMIT_FORM, EVALUATE_JS)
 }

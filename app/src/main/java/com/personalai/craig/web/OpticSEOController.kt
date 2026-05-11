@@ -109,27 +109,38 @@ class OpticSEOController @Inject constructor(
             val result = when (toolCall.name) {
                 "navigate" -> {
                     val url = toolCall.input["url"] ?: return ToolResult(toolCall.id, "Missing url parameter", isError = true).also { hadError.set(true) }
-                    when {
-                        url.contains("report", ignoreCase = true) ->
-                            onProgress?.invoke("Heading to the reports section now.")
-                        url.contains("manage", ignoreCase = true) || url.contains("client", ignoreCase = true) ->
-                            onProgress?.invoke("Looking up the client now.")
-                        url.contains("opticseoservices.com") ->
-                            onProgress?.invoke("Navigating the site.")
+                    val navResult = webManager.navigate(url)
+                    // Fire progress AFTER successful navigation so the message reflects reality
+                    if (!navResult.contains("timed out")) {
+                        when {
+                            url.contains("report", ignoreCase = true) ->
+                                onProgress?.invoke("Now on the reports page — looking for your report.")
+                            url.contains("manage", ignoreCase = true) || url.contains("client", ignoreCase = true) ->
+                                onProgress?.invoke("On the clients page — searching for your client.")
+                            url.contains("opticseoservices.com") ->
+                                onProgress?.invoke("Loaded the OpticSEO portal.")
+                        }
                     }
-                    webManager.navigate(url)
+                    navResult
                 }
                 "click_by_text" -> {
                     val text = toolCall.input["text"] ?: return ToolResult(toolCall.id, "Missing text parameter", isError = true).also { hadError.set(true) }
-                    when {
-                        text.contains("report", ignoreCase = true) ->
-                            onProgress?.invoke("Opening the report now.")
-                        text.contains("seo check", ignoreCase = true) || text.contains("run", ignoreCase = true) ->
-                            onProgress?.invoke("Starting the check, this may take a minute.")
-                        text.contains("keyword", ignoreCase = true) ->
-                            onProgress?.invoke("Running keyword analysis.")
+                    val clickResult = webManager.clickByText(text)
+                    // Only announce meaningful clicks that actually worked
+                    if (!clickResult.contains("not found")) {
+                        val lower = text.lowercase()
+                        when {
+                            lower.contains("run seo") || lower.contains("seo check") ->
+                                onProgress?.invoke("SEO check started — this usually takes 1 to 3 minutes.")
+                            lower.contains("keyword check") || lower.contains("suggest keyword") ->
+                                onProgress?.invoke("Keyword analysis started.")
+                            lower.contains("view report") || lower.contains("open report") ->
+                                onProgress?.invoke("Opening your report now.")
+                            lower.contains("run") && (lower.contains("check") || lower.contains("report") || lower.contains("audit")) ->
+                                onProgress?.invoke("Check started — waiting for it to finish.")
+                        }
                     }
-                    webManager.clickByText(text)
+                    clickResult
                 }
                 "click_by_selector" -> {
                     val selector = toolCall.input["selector"] ?: return ToolResult(toolCall.id, "Missing selector parameter", isError = true).also { hadError.set(true) }
@@ -145,9 +156,18 @@ class OpticSEOController @Inject constructor(
                 }
                 "wait_for_element" -> {
                     val selector = toolCall.input["selector"] ?: return ToolResult(toolCall.id, "Missing selector parameter", isError = true).also { hadError.set(true) }
-                    val timeout = toolCall.input["timeout_ms"]?.toLongOrNull() ?: 8000L
-                    onProgress?.invoke("Waiting for the report to finish.")
+                    val timeout = toolCall.input["timeout_ms"]?.toLongOrNull() ?: 8_000L
                     webManager.waitForElement(selector, timeout)
+                }
+                "wait_for_page_text" -> {
+                    val text = toolCall.input["text"] ?: return ToolResult(toolCall.id, "Missing text parameter", isError = true).also { hadError.set(true) }
+                    val timeout = toolCall.input["timeout_ms"]?.toLongOrNull() ?: 180_000L
+                    onProgress?.invoke("Waiting for the report to complete — this can take a couple of minutes.")
+                    val waitResult = webManager.waitForPageText(text, timeout)
+                    if (waitResult.contains("text found")) {
+                        onProgress?.invoke("Report is done — heading to collect the results.")
+                    }
+                    waitResult
                 }
                 "submit_form" -> {
                     val selector = toolCall.input["selector"] ?: "form"
