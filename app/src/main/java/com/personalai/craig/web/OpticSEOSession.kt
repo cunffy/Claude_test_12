@@ -60,29 +60,43 @@ class OpticSEOSession @Inject constructor(
         }
 
         return try {
-            // Go directly to the login page — no SPA-redirect uncertainty
-            manager.navigate(LOGIN_URL)
+            // Navigate to the app URL first — if cookies are still valid the site skips the
+            // login page entirely and we're done. Navigating to /login directly misses this.
+            manager.navigate(APP_URL)
+            delay(1_500)
 
-            // Single combined waitForElement check — waits up to 8 s for ANY email
-            // input variant to appear. Using one wait avoids 7 × 6 s = 42 s timeouts.
-            val wait = manager.waitForElement(EMAIL_COMBINED, timeoutMs = 8_000)
+            var currentUrl = manager.getCurrentUrl().lowercase()
+
+            if (currentUrl.contains("opticseoservices.com") && !currentUrl.contains("login")) {
+                Log.i(TAG, "Cookie session valid — already on app at $currentUrl")
+                isLoggedIn = true
+                return true
+            }
+
+            // If the site didn't redirect us to a login page, force navigate there
+            if (!currentUrl.contains("login")) {
+                manager.navigate(LOGIN_URL)
+                delay(1_000)
+            }
+
+            // Wait for the email field — generous timeout for slow SPA rendering
+            val wait = manager.waitForElement(EMAIL_COMBINED, timeoutMs = 12_000)
             val emailFieldPresent = wait.contains("element found")
-            val currentUrl = manager.getCurrentUrl().lowercase()
+            currentUrl = manager.getCurrentUrl().lowercase()
 
             if (!emailFieldPresent) {
-                // If there's no login form we may already be logged in (cookie session)
                 if (currentUrl.contains("opticseoservices.com") && !currentUrl.contains("login")) {
-                    Log.i(TAG, "No login form — already authenticated via cookie")
+                    Log.i(TAG, "Redirected to app without showing login form — treating as logged in")
                     isLoggedIn = true
                     return true
                 }
-                Log.e(TAG, "Login form not found on $currentUrl — cannot log in")
+                Log.e(TAG, "Login form not found on $currentUrl")
                 return false
             }
 
             Log.i(TAG, "Login form detected — filling credentials")
 
-            // Fill email
+            // Fill email — try each selector until one works
             var emailFilled = false
             for (sel in EMAIL_SELECTORS) {
                 val r = manager.fillInput(sel, username)
@@ -95,11 +109,10 @@ class OpticSEOSession @Inject constructor(
 
             // Fill password
             manager.fillInput("input[type='password']", password)
+            delay(800)
 
-            // Let React/Vue state settle before submitting
-            delay(500)
-
-            // Submit — try typed submit buttons first, fall back to any button
+            // Submit — try typed submit buttons first, then form.submit() as fallback
+            var submitted = false
             val submitSelectors = listOf(
                 "button[type='submit']",
                 "input[type='submit']",
@@ -112,28 +125,33 @@ class OpticSEOSession @Inject constructor(
                 val r = manager.clickBySelector(sel)
                 if (!r.contains("not found")) {
                     Log.i(TAG, "Submit clicked via $sel")
+                    submitted = true
                     break
                 }
             }
+            if (!submitted) {
+                // Last resort: trigger native form submission via JS
+                manager.submitForm("form")
+                Log.i(TAG, "Submit via form.submit() fallback")
+            }
 
-            // Wait for the post-login redirect (SPA may animate the transition)
-            delay(6_000)
-
-            val postUrl = manager.getCurrentUrl().lowercase()
-            isLoggedIn = postUrl.contains("opticseoservices.com") && !postUrl.contains("login")
-
-            if (!isLoggedIn) {
-                // Slow redirect — give it a bit more time
-                delay(4_000)
-                val finalUrl = manager.getCurrentUrl().lowercase()
-                isLoggedIn = finalUrl.contains("opticseoservices.com") && !finalUrl.contains("login")
+            // Poll for post-login redirect instead of a fixed delay —
+            // fires as soon as the site lands on the app page (up to 20 s).
+            val deadline = System.currentTimeMillis() + 20_000L
+            while (System.currentTimeMillis() < deadline) {
+                delay(700)
+                val url = manager.getCurrentUrl().lowercase()
+                if (url.contains("opticseoservices.com") && !url.contains("login")) {
+                    isLoggedIn = true
+                    break
+                }
             }
 
             if (isLoggedIn) {
                 Log.i(TAG, "Login succeeded — now at ${manager.getCurrentUrl()}")
             } else {
                 val pageSnippet = manager.readPageContent().take(300)
-                Log.e(TAG, "Login failed — page: $pageSnippet")
+                Log.e(TAG, "Login failed — still on login page: $pageSnippet")
             }
 
             isLoggedIn
