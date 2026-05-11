@@ -6,6 +6,8 @@ import com.personalai.craig.ai.tools.ToolResult
 import com.personalai.craig.ai.tools.WebToolDefinition
 import com.personalai.craig.data.preferences.SecurePreferences
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -13,8 +15,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.coroutineContext
 
 /**
  * Handles all communication with the Anthropic Claude API using OkHttp directly.
@@ -84,54 +88,70 @@ class ClaudeClient @Inject constructor(
             .header("accept", "text/event-stream")
             .build()
 
+        val call = okHttpClient.newCall(request)
+        // Cancel the HTTP call when the coroutine is cancelled so the IO thread
+        // doesn't stay blocked on readUtf8Line() after the ViewModel is cleared.
+        val cancellationHandle = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
+
         val fullResponse = StringBuilder()
         val sentenceBuffer = StringBuilder()
 
-        okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                val err = response.body?.string() ?: "Unknown error"
-                throw RuntimeException("Claude API error ${response.code}: $err")
-            }
-            val source = response.body?.source() ?: return@withContext ""
+        try {
+            call.execute().use { response ->
+                if (!response.isSuccessful) {
+                    val err = response.body?.string() ?: "Unknown error"
+                    throw RuntimeException("Claude API error ${response.code}: $err")
+                }
+                val source = response.body?.source() ?: return@withContext ""
 
-            while (!source.exhausted()) {
-                val line = source.readUtf8Line() ?: break
-                if (!line.startsWith("data: ")) continue
-                val data = line.removePrefix("data: ").trim()
-                if (data == "[DONE]") break
+                while (!source.exhausted()) {
+                    ensureActive() // Throw CancellationException between reads if cancelled
+                    val line = source.readUtf8Line() ?: break
+                    if (!line.startsWith("data: ")) continue
+                    val data = line.removePrefix("data: ").trim()
+                    if (data == "[DONE]") break
 
-                try {
-                    val json = JSONObject(data)
-                    val type = json.optString("type")
-                    if (type == "content_block_delta") {
-                        val delta = json.optJSONObject("delta")
-                        if (delta?.optString("type") == "text_delta") {
-                            val text = delta.optString("text")
-                            fullResponse.append(text)
-                            sentenceBuffer.append(text)
+                    try {
+                        val json = JSONObject(data)
+                        val type = json.optString("type")
+                        if (type == "content_block_delta") {
+                            val delta = json.optJSONObject("delta")
+                            if (delta?.optString("type") == "text_delta") {
+                                val text = delta.optString("text")
+                                fullResponse.append(text)
+                                sentenceBuffer.append(text)
 
-                            // Emit complete sentences for real-time TTS
-                            val buf = sentenceBuffer.toString()
-                            val sentenceEnd = buf.lastIndexOfAny(charArrayOf('.', '!', '?', '\n'))
-                            if (sentenceEnd >= 0) {
-                                val sentence = buf.substring(0, sentenceEnd + 1).trim()
-                                if (sentence.isNotEmpty()) {
-                                    withContext(Dispatchers.Main) { onChunk(sentence) }
+                                // Emit complete sentences for real-time TTS
+                                val buf = sentenceBuffer.toString()
+                                val sentenceEnd = buf.lastIndexOfAny(charArrayOf('.', '!', '?', '\n'))
+                                if (sentenceEnd >= 0) {
+                                    val sentence = buf.substring(0, sentenceEnd + 1).trim()
+                                    if (sentence.isNotEmpty()) {
+                                        withContext(Dispatchers.Main) { onChunk(sentence) }
+                                    }
+                                    sentenceBuffer.delete(0, sentenceEnd + 1)
                                 }
-                                sentenceBuffer.delete(0, sentenceEnd + 1)
                             }
                         }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to parse SSE event: $data")
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to parse SSE event: $data")
+                }
+
+                // Flush remaining buffer
+                val remaining = sentenceBuffer.toString().trim()
+                if (remaining.isNotEmpty()) {
+                    withContext(Dispatchers.Main) { onChunk(remaining) }
                 }
             }
-
-            // Flush remaining buffer
-            val remaining = sentenceBuffer.toString().trim()
-            if (remaining.isNotEmpty()) {
-                withContext(Dispatchers.Main) { onChunk(remaining) }
-            }
+        } catch (e: IOException) {
+            // call.cancel() causes OkHttp to throw IOException("Canceled").
+            // Re-check whether the coroutine is still active — if not, this is
+            // expected cancellation, not a real network error.
+            ensureActive()
+            throw e
+        } finally {
+            cancellationHandle?.dispose()
         }
 
         fullResponse.toString()

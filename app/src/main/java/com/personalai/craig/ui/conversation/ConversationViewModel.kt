@@ -105,6 +105,9 @@ class ConversationViewModel @Inject constructor(
                         conversationHistory.add(ClaudeClient.Message(msg.role, msg.content))
                     }
                 }
+                // Repair any history that starts with an assistant message —
+                // this can happen if a prior crash left an orphaned user message in the DB.
+                trimHistory()
             }
         }
     }
@@ -148,11 +151,10 @@ class ConversationViewModel @Inject constructor(
                 }
                 conversationRepository.addMessage(convId, "user", userText)
 
-                // Add to in-memory history
+                // Add to in-memory history. trimHistory() removes from the front in a way
+                // that keeps the list user-first, as required by the Claude Messages API.
                 conversationHistory.add(ClaudeClient.Message("user", userText))
-                if (conversationHistory.size > MAX_CONTEXT_MESSAGES) {
-                    conversationHistory.removeAt(0)
-                }
+                trimHistory()
 
                 val responseText: String
                 var responseImageBase64: String? = null
@@ -197,9 +199,7 @@ class ConversationViewModel @Inject constructor(
                 conversationRepository.addMessage(convId, "assistant", responseText)
 
                 conversationHistory.add(ClaudeClient.Message("assistant", responseText))
-                if (conversationHistory.size > MAX_CONTEXT_MESSAGES) {
-                    conversationHistory.removeAt(0)
-                }
+                trimHistory()
 
                 // Background: extract personal facts from this exchange
                 launch(Dispatchers.IO) {
@@ -209,14 +209,28 @@ class ConversationViewModel @Inject constructor(
                 _uiState.value = UiState.Idle
 
             } catch (e: CancellationException) {
-                // Must rethrow — swallowing CancellationException breaks structured concurrency
-                // and causes crashes when the activity is swiped away mid-request.
+                // Roll back the pending user message so the next request doesn't end up with
+                // two consecutive user messages (Claude rejects those with a 400 error).
+                rollbackUserMessage()
+                _uiState.value = UiState.Idle
+                // Must rethrow — swallowing CancellationException breaks structured concurrency.
                 throw e
             } catch (e: Exception) {
+                // Roll back the pending user message for the same reason as above.
+                rollbackUserMessage()
                 Log.e(TAG, "Error processing input: ${e.message}", e)
                 val errMsg = when {
-                    e.message?.contains("API key") == true -> "Claude API key issue. Check Settings."
-                    e.message?.contains("network") == true -> "No internet connection."
+                    e.message?.contains("API key", ignoreCase = true) == true ||
+                    e.message?.contains("401") == true ||
+                    e.message?.contains("authentication", ignoreCase = true) == true ->
+                        "Claude API key issue. Check Settings."
+                    e.message?.contains("network", ignoreCase = true) == true ||
+                    e.message?.contains("Unable to resolve host") == true ||
+                    e.message?.contains("Failed to connect") == true ->
+                        "No internet connection."
+                    e.message?.contains("timeout", ignoreCase = true) == true ||
+                    e.message?.contains("timed out", ignoreCase = true) == true ->
+                        "Request timed out. Please try again."
                     else -> "Something went wrong. Please try again."
                 }
                 ttsManager.speak(errMsg, flushQueue = true)
@@ -224,6 +238,30 @@ class ConversationViewModel @Inject constructor(
             } finally {
                 processingMutex.unlock()
             }
+        }
+    }
+
+    /**
+     * If the last message in history is a user message, remove it.
+     * Called in error/cancellation paths to prevent the next request from seeing
+     * consecutive user messages, which the Claude API rejects with a 400 error.
+     */
+    private fun rollbackUserMessage() {
+        if (conversationHistory.lastOrNull()?.role == "user") {
+            conversationHistory.removeLastOrNull()
+        }
+    }
+
+    /**
+     * Trim conversationHistory to MAX_CONTEXT_MESSAGES, then ensure the first
+     * entry is always a user message (the Claude Messages API requires this).
+     */
+    private fun trimHistory() {
+        while (conversationHistory.size > MAX_CONTEXT_MESSAGES) {
+            conversationHistory.removeAt(0)
+        }
+        while (conversationHistory.firstOrNull()?.role == "assistant") {
+            conversationHistory.removeAt(0)
         }
     }
 
