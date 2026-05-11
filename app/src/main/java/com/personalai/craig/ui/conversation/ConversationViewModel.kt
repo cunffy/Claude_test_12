@@ -31,14 +31,34 @@ class ConversationViewModel @Inject constructor(
     companion object {
         private const val TAG = "ConversationViewModel"
         private const val MAX_CONTEXT_MESSAGES = 20
-        // Keywords that suggest OpticSEO web control is needed
+        // Phrases that clearly mean "do something on the OpticSEO website".
+        // Deliberately specific — single words like "client", "rank", "website"
+        // were matching almost every business question and routing everything
+        // through the web path, causing constant "something went wrong" errors.
         private val OPTICSEO_KEYWORDS = listOf(
-            "opticseo", "optic seo", "seo check", "seo report", "client", "clients",
-            "website", "rank", "ranking", "analyze", "analyse", "audit"
+            // Direct site name
+            "opticseo", "optic seo",
+            // SEO actions
+            "seo check", "seo report", "run a check", "run the check", "run an audit",
+            // Keyword tool
+            "keyword check", "keyword analysis", "suggest keyword",
+            // Mail / signup
+            "signup link", "sign up link", "send a link to", "send link to",
+            // Chat tab
+            "send a chat to", "send chat to",
+            // Quotes
+            "send a quote", "send quote", "update quote", "update the quote",
+            // Client lookup — must pair "client" with an action word
+            "manage client", "find the client", "look up the client",
+            // Explicit navigation
+            "go to the site", "go to the portal", "open the portal", "open the admin",
+            "check the dashboard", "check the site"
         )
-        // Keywords that suggest a screenshot should be captured
+        // Phrases that clearly mean "show me what's on screen" — not just any "show me"
         private val SCREENSHOT_KEYWORDS = listOf(
-            "screenshot", "show me", "what does it look like", "photo", "capture"
+            "screenshot",
+            "show me the screen", "what's on screen", "what is on screen",
+            "capture the screen", "take a photo of the screen"
         )
     }
 

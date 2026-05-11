@@ -47,9 +47,14 @@ class SpeechToTextManager @Inject constructor(
     private var lastLanguage = "en-US"
     private var busyRetryCount = 0
     private val mainHandler = Handler(Looper.getMainLooper())
+    // Set to true by reset(); cleared by startListening(). Prevents a delayed retry
+    // callback posted by onError() from creating a zombie recognizer after the
+    // activity has already called reset() and gone away.
+    @Volatile private var isReset = false
 
     @MainThread
     fun startListening(language: String = "en-US") {
+        isReset = false
         lastLanguage = language
         busyRetryCount = 0
         startListeningInternal(language)
@@ -57,6 +62,7 @@ class SpeechToTextManager @Inject constructor(
 
     @MainThread
     private fun startListeningInternal(language: String) {
+        if (isReset) return  // activity is gone; don't create a zombie recognizer
         recognizer?.destroy()
         recognizer = SpeechRecognizer.createSpeechRecognizer(context)
         recognizer?.setRecognitionListener(buildListener())
@@ -93,6 +99,7 @@ class SpeechToTextManager @Inject constructor(
      */
     @MainThread
     fun reset() {
+        isReset = true
         mainHandler.removeCallbacksAndMessages(null)
         busyRetryCount = 0
         recognizer?.cancel()
