@@ -43,6 +43,15 @@ MAIL TAB: I can ask you to read emails and interact with them. If I say "Send a 
 
 QUOTES (in Manage Clients): If I ask you to send or update a quote for a client — go to that client in Manage Clients, click Send or Update Quote, ask me what values to input, then send it.
 
+AFTER RUNNING ANY REPORT (SEO check, keyword check, map grid, or any other report type) — do this every time without being asked:
+1. Wait for the report to finish. Poll the page every few seconds until you see a completion indicator: progress bar gone, "View Report" button appearing, status changing from "Running"/"In Progress" to "Complete"/"Done", or a score value appearing.
+2. Once complete, navigate to the Reports tab.
+3. In the Reports tab, find the entry that matches the website or domain you just ran the report on. Match by the domain name in the report list.
+4. Expand the dropdown or row for that website to reveal the individual report types (SEO, Keyword, Map Grid, etc.).
+5. Click the specific report type you just ran to open it.
+6. Take a screenshot of the first page showing the overall score or summary.
+7. Tell me the score and the 2-3 most important findings in plain sentences.
+
 This is not everything you will do — learn as you go. When I give you a new instruction you have not seen before, figure it out by exploring the site."""
     }
 

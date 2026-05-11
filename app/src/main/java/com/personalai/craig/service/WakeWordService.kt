@@ -47,7 +47,7 @@ class WakeWordService : Service() {
         // Grammar limits Vosk to only these phrases — faster and more accurate for wake words
         private const val WAKE_GRAMMAR = """["hey craig", "help me craig", "[unk]"]"""
         private val WAKE_PHRASES = listOf("hey craig", "help me craig")
-        private const val MIN_CONFIDENCE = 0.72f  // per-word minimum; below this = ambient noise
+        private const val MIN_CONFIDENCE = 0.84f  // per-word minimum; higher = fewer false triggers
 
         const val NOTIF_CHANNEL_ID = "craig_wake_word"
         const val NOTIF_ID = 1001
