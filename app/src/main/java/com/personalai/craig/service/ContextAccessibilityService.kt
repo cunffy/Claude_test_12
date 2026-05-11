@@ -43,11 +43,13 @@ class ContextAccessibilityService : AccessibilityService() {
 
         val rootNode = rootInActiveWindow ?: return
 
+        // Extract text synchronously on the main/service thread — AccessibilityNodeInfo
+        // is not thread-safe and must not be accessed from a background thread.
+        val text = try { extractText(rootNode, 0).take(MAX_TEXT_LENGTH) } catch (e: Exception) { "" }
+        val windowTitle = event.text?.firstOrNull()?.toString()
+
         scope.launch {
             try {
-                val text = extractText(rootNode).take(MAX_TEXT_LENGTH)
-                val windowTitle = event.text?.firstOrNull()?.toString()
-
                 appContextDao.insert(
                     AppContextEntity(
                         packageName = packageName,
@@ -58,18 +60,24 @@ class ContextAccessibilityService : AccessibilityService() {
                 )
                 appContextDao.pruneOld()
             } catch (e: Exception) {
-                Log.w(TAG, "Error reading screen: ${e.message}")
+                Log.w(TAG, "Error storing screen context: ${e.message}")
             }
         }
     }
 
-    private fun extractText(node: AccessibilityNodeInfo?): String {
+    private fun extractText(node: AccessibilityNodeInfo?, depth: Int): String {
         node ?: return ""
+        if (depth > 30) return ""  // prevent stack overflow on pathological view hierarchies
         val sb = StringBuilder()
-        node.text?.let { if (it.isNotBlank()) sb.append(it).append(' ') }
-        node.contentDescription?.let { if (it.isNotBlank()) sb.append(it).append(' ') }
-        for (i in 0 until node.childCount) {
-            sb.append(extractText(node.getChild(i)))
+        try {
+            node.text?.let { if (it.isNotBlank()) sb.append(it).append(' ') }
+            node.contentDescription?.let { if (it.isNotBlank()) sb.append(it).append(' ') }
+            for (i in 0 until node.childCount) {
+                val child = try { node.getChild(i) } catch (e: Exception) { null } ?: continue
+                sb.append(extractText(child, depth + 1))
+            }
+        } catch (e: Exception) {
+            // Node became stale or was recycled during traversal — skip silently
         }
         return sb.toString().trim()
     }

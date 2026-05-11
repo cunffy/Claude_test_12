@@ -3,8 +3,8 @@ package com.personalai.craig.web
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.net.http.SslError
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
@@ -12,12 +12,12 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.net.http.SslError
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -111,18 +111,19 @@ class WebAutomationManager @Inject constructor(
     suspend fun clickByText(text: String): String = evaluateJs(
         """
         (function() {
+            var needle = ${jsStr(text.lowercase())};
             var selectors = ['button', 'a', '[role="button"]', 'input[type="submit"]', 'li', 'span', 'div'];
             for (var s = 0; s < selectors.length; s++) {
                 var els = document.querySelectorAll(selectors[s]);
                 for (var i = 0; i < els.length; i++) {
                     var elText = (els[i].innerText || els[i].textContent || els[i].value || '').trim();
-                    if (elText.toLowerCase().includes('${text.lowercase().replace("'", "\\'")}')) {
+                    if (elText.toLowerCase().includes(needle)) {
                         els[i].click();
                         return 'clicked: ' + elText.substring(0, 60);
                     }
                 }
             }
-            return 'element not found with text: ${text.replace("'", "\\'")}';
+            return 'element not found with text: ' + needle;
         })()
         """.trimIndent()
     )
@@ -133,9 +134,9 @@ class WebAutomationManager @Inject constructor(
     suspend fun clickBySelector(selector: String): String = evaluateJs(
         """
         (function() {
-            var el = document.querySelector('${selector.replace("'", "\\'")}');
+            var el = document.querySelector(${jsStr(selector)});
             if (el) { el.click(); return 'clicked: ' + el.tagName + ' ' + (el.innerText||'').substring(0,40); }
-            return 'selector not found: ${selector.replace("'", "\\'")}';
+            return 'selector not found: ' + ${jsStr(selector)};
         })()
         """.trimIndent()
     )
@@ -148,15 +149,16 @@ class WebAutomationManager @Inject constructor(
     suspend fun fillInput(selector: String, value: String): String = evaluateJs(
         """
         (function() {
-            var el = document.querySelector('${selector.replace("'", "\\'")}');
-            if (!el) return 'input not found: ${selector.replace("'", "\\'")}';
+            var el = document.querySelector(${jsStr(selector)});
+            if (!el) return 'input not found: ' + ${jsStr(selector)};
             el.scrollIntoView();
             el.focus();
+            var v = ${jsStr(value)};
             try {
                 var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                nativeSetter.call(el, '${value.replace("'", "\\'")}');
+                nativeSetter.call(el, v);
             } catch(e) {
-                el.value = '${value.replace("'", "\\'")}';
+                el.value = v;
             }
             el.dispatchEvent(new Event('input', {bubbles:true}));
             el.dispatchEvent(new Event('change', {bubbles:true}));
@@ -187,8 +189,8 @@ class WebAutomationManager @Inject constructor(
     suspend fun submitForm(selector: String): String = evaluateJs(
         """
         (function() {
-            var form = document.querySelector('${selector.replace("'", "\\'")}');
-            if (!form) return 'form not found: ${selector.replace("'", "\\'")}';
+            var form = document.querySelector(${jsStr(selector)});
+            if (!form) return 'form not found: ' + ${jsStr(selector)};
             form.submit();
             return 'form submitted';
         })()
@@ -204,7 +206,7 @@ class WebAutomationManager @Inject constructor(
                 var found = false
                 while (!found) {
                     val result = evaluateJsOnMain(
-                        "document.querySelector('${selector.replace("'", "\\'")}') !== null"
+                        "document.querySelector(${jsStr(selector)}) !== null"
                     )
                     found = result.contains("true")
                     if (!found) kotlinx.coroutines.delay(300)
@@ -235,8 +237,9 @@ class WebAutomationManager @Inject constructor(
      */
     suspend fun captureScreenshot(): String? = withContext(Dispatchers.Main) {
         try {
-            val w = webView.width.coerceAtLeast(100)
-            val h = webView.height.coerceAtLeast(100)
+            // Headless WebViews can report 0 from width/height even after layout() — fall back to known dimensions
+            val w = webView.width.takeIf { it > 0 } ?: 1080
+            val h = webView.height.takeIf { it > 0 } ?: 2340
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             webView.draw(canvas)
@@ -250,6 +253,9 @@ class WebAutomationManager @Inject constructor(
     }
 
     suspend fun getCurrentUrl(): String = withContext(Dispatchers.Main) { webView.url ?: "" }
+
+    /** Returns a JSON-encoded string literal (including surrounding quotes) safe to embed in JS. */
+    private fun jsStr(s: String): String = JSONObject.quote(s)
 
     suspend fun clearSession() = withContext(Dispatchers.Main) {
         webView.clearCache(true)

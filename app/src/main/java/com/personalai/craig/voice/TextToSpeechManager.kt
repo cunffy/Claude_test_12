@@ -43,6 +43,7 @@ class TextToSpeechManager @Inject constructor(
             val result = tts?.setLanguage(Locale.US)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e(TAG, "Language not supported")
+                pendingQueue.clear()
             } else {
                 isInitialized = true
                 // Slightly slower + lower pitch = more natural, confident tone
@@ -54,6 +55,7 @@ class TextToSpeechManager @Inject constructor(
             }
         } else {
             Log.e(TAG, "TTS init failed with status: $status")
+            pendingQueue.clear()
         }
     }
 
@@ -80,7 +82,7 @@ class TextToSpeechManager @Inject constructor(
     fun speak(text: String, flushQueue: Boolean = false) {
         if (text.isBlank()) return
         if (!isInitialized) {
-            pendingQueue.add(text)
+            if (pendingQueue.size < 10) pendingQueue.add(text)
             return
         }
         val queueMode = if (flushQueue) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
